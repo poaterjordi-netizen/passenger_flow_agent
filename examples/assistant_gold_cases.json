@@ -1,0 +1,3140 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {
+      "case_id": "assistant-001",
+      "category": "natural_query",
+      "question": "查询各站进站客流",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_metric"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-002",
+      "category": "natural_query",
+      "question": "查询各站出站客流并排序",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_metric",
+        "rank_stations"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-003",
+      "category": "natural_query",
+      "question": "查询 1 号线各站换乘客流",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_metric"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-004",
+      "category": "natural_query",
+      "question": "查询 2 号线上行净流入",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_metric"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-005",
+      "category": "natural_query",
+      "question": "查询 S-ALPHA 站进站量",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_metric"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-006",
+      "category": "natural_query",
+      "question": "查询各线路进站客流",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_metric"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-007",
+      "category": "natural_query",
+      "question": "查询各方向出站客流",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_metric"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-008",
+      "category": "natural_query",
+      "question": "查询各站进站客流，只看前三名",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_metric",
+        "rank_stations"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-009",
+      "category": "natural_query",
+      "question": "按小时列出进站客流明细",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_metric"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-010",
+      "category": "natural_query",
+      "question": "查询晚高峰各站净流入并排序",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_metric",
+        "rank_stations"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-011",
+      "category": "multi_compare",
+      "question": "比较 1 号线和 2 号线工作日晚高峰进站客流",
+      "expected_task_type": "compare",
+      "expected_tools": [
+        "query_metric",
+        "compare_groups"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-012",
+      "category": "multi_compare",
+      "question": "对比 1 号线和 2 号线各站出站客流",
+      "expected_task_type": "compare",
+      "expected_tools": [
+        "query_metric",
+        "compare_groups"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-013",
+      "category": "multi_compare",
+      "question": "比较 1 号线和 2 号线换乘客流",
+      "expected_task_type": "compare",
+      "expected_tools": [
+        "query_metric",
+        "compare_groups"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-014",
+      "category": "multi_compare",
+      "question": "比较 1 号线和 2 号线上行净流入",
+      "expected_task_type": "compare",
+      "expected_tools": [
+        "query_metric",
+        "compare_groups"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-015",
+      "category": "multi_compare",
+      "question": "对比 1 号线与 2 号线客流并结合设备故障次数分析",
+      "expected_task_type": "compare",
+      "expected_tools": [
+        "query_metric",
+        "compare_groups",
+        "get_operational_indicators",
+        "calculate_correlation"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-016",
+      "category": "multi_compare",
+      "question": "比较两个时段进站客流",
+      "expected_task_type": "compare",
+      "expected_tools": [
+        "compare_metric_periods"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-017",
+      "category": "multi_compare",
+      "question": "环比两个时段出站客流",
+      "expected_task_type": "compare",
+      "expected_tools": [
+        "compare_metric_periods"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-018",
+      "category": "multi_compare",
+      "question": "同比两个时段换乘客流",
+      "expected_task_type": "compare",
+      "expected_tools": [
+        "compare_metric_periods"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-019",
+      "category": "multi_compare",
+      "question": "比较两个时段净流入",
+      "expected_task_type": "compare",
+      "expected_tools": [
+        "compare_metric_periods"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-020",
+      "category": "multi_compare",
+      "question": "对比早晚两个时段进站客流",
+      "expected_task_type": "compare",
+      "expected_tools": [
+        "compare_metric_periods"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-021",
+      "category": "event_forecast",
+      "question": "奥体中心有 1 万人演唱会，预测附近站点客流并给出建议",
+      "expected_task_type": "forecast",
+      "expected_tools": [
+        "find_similar_historical_days",
+        "run_reference_day_forecast",
+        "run_event_forecast",
+        "compare_forecast_with_baseline",
+        "search_operating_sop"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "model_output",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "run_event_forecast",
+        "name": "attendance",
+        "value": 10000
+      }
+    },
+    {
+      "case_id": "assistant-022",
+      "category": "event_forecast",
+      "question": "奥体中心有 2 万人演唱会，预测附近站点客流并给出建议",
+      "expected_task_type": "forecast",
+      "expected_tools": [
+        "find_similar_historical_days",
+        "run_reference_day_forecast",
+        "run_event_forecast",
+        "compare_forecast_with_baseline",
+        "search_operating_sop"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "model_output",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "run_event_forecast",
+        "name": "attendance",
+        "value": 20000
+      }
+    },
+    {
+      "case_id": "assistant-023",
+      "category": "event_forecast",
+      "question": "奥体中心有 3 万人演唱会，预测附近站点客流并给出建议",
+      "expected_task_type": "forecast",
+      "expected_tools": [
+        "find_similar_historical_days",
+        "run_reference_day_forecast",
+        "run_event_forecast",
+        "compare_forecast_with_baseline",
+        "search_operating_sop"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "model_output",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "run_event_forecast",
+        "name": "attendance",
+        "value": 30000
+      }
+    },
+    {
+      "case_id": "assistant-024",
+      "category": "event_forecast",
+      "question": "奥体中心有 4 万人演唱会，预测附近站点客流并给出建议",
+      "expected_task_type": "forecast",
+      "expected_tools": [
+        "find_similar_historical_days",
+        "run_reference_day_forecast",
+        "run_event_forecast",
+        "compare_forecast_with_baseline",
+        "search_operating_sop"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "model_output",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "run_event_forecast",
+        "name": "attendance",
+        "value": 40000
+      }
+    },
+    {
+      "case_id": "assistant-025",
+      "category": "event_forecast",
+      "question": "奥体中心有 5 万人演唱会，预测附近站点客流并给出建议",
+      "expected_task_type": "forecast",
+      "expected_tools": [
+        "find_similar_historical_days",
+        "run_reference_day_forecast",
+        "run_event_forecast",
+        "compare_forecast_with_baseline",
+        "search_operating_sop"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "model_output",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "run_event_forecast",
+        "name": "attendance",
+        "value": 50000
+      }
+    },
+    {
+      "case_id": "assistant-026",
+      "category": "event_forecast",
+      "question": "奥体中心有 6 万人演唱会，预测附近站点客流并给出建议",
+      "expected_task_type": "forecast",
+      "expected_tools": [
+        "find_similar_historical_days",
+        "run_reference_day_forecast",
+        "run_event_forecast",
+        "compare_forecast_with_baseline",
+        "search_operating_sop"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "model_output",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "run_event_forecast",
+        "name": "attendance",
+        "value": 60000
+      }
+    },
+    {
+      "case_id": "assistant-027",
+      "category": "event_forecast",
+      "question": "奥体中心有 7 万人演唱会，预测附近站点客流并给出建议",
+      "expected_task_type": "forecast",
+      "expected_tools": [
+        "find_similar_historical_days",
+        "run_reference_day_forecast",
+        "run_event_forecast",
+        "compare_forecast_with_baseline",
+        "search_operating_sop"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "model_output",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "run_event_forecast",
+        "name": "attendance",
+        "value": 70000
+      }
+    },
+    {
+      "case_id": "assistant-028",
+      "category": "event_forecast",
+      "question": "奥体中心有 8 万人演唱会，预测附近站点客流并给出建议",
+      "expected_task_type": "forecast",
+      "expected_tools": [
+        "find_similar_historical_days",
+        "run_reference_day_forecast",
+        "run_event_forecast",
+        "compare_forecast_with_baseline",
+        "search_operating_sop"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "model_output",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "run_event_forecast",
+        "name": "attendance",
+        "value": 80000
+      }
+    },
+    {
+      "case_id": "assistant-029",
+      "category": "event_forecast",
+      "question": "奥体中心有 9 万人演唱会，预测附近站点客流并给出建议",
+      "expected_task_type": "forecast",
+      "expected_tools": [
+        "find_similar_historical_days",
+        "run_reference_day_forecast",
+        "run_event_forecast",
+        "compare_forecast_with_baseline",
+        "search_operating_sop"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "model_output",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "run_event_forecast",
+        "name": "attendance",
+        "value": 90000
+      }
+    },
+    {
+      "case_id": "assistant-030",
+      "category": "event_forecast",
+      "question": "奥体中心有 10 万人演唱会，预测附近站点客流并给出建议",
+      "expected_task_type": "forecast",
+      "expected_tools": [
+        "find_similar_historical_days",
+        "run_reference_day_forecast",
+        "run_event_forecast",
+        "compare_forecast_with_baseline",
+        "search_operating_sop"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "model_output",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "run_event_forecast",
+        "name": "attendance",
+        "value": 100000
+      }
+    },
+    {
+      "case_id": "assistant-031",
+      "category": "realtime_alert",
+      "question": "实时站台密度预警",
+      "expected_task_type": "alert",
+      "expected_tools": [
+        "detect_anomalies",
+        "get_alert_thresholds",
+        "search_operating_sop",
+        "build_action_candidates"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-032",
+      "category": "realtime_alert",
+      "question": "摄像头显示站台密度 0.82，请做预警研判",
+      "expected_task_type": "alert",
+      "expected_tools": [
+        "detect_anomalies",
+        "get_alert_thresholds",
+        "search_operating_sop",
+        "build_action_candidates"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-033",
+      "category": "realtime_alert",
+      "question": "列车满载率 0.95，生成实时预警",
+      "expected_task_type": "alert",
+      "expected_tools": [
+        "detect_anomalies",
+        "get_alert_thresholds",
+        "search_operating_sop",
+        "build_action_candidates"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-034",
+      "category": "realtime_alert",
+      "question": "进站速率持续上升，请给出预警建议",
+      "expected_task_type": "alert",
+      "expected_tools": [
+        "detect_anomalies",
+        "get_alert_thresholds",
+        "search_operating_sop",
+        "build_action_candidates"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-035",
+      "category": "realtime_alert",
+      "question": "实时拥挤异常研判并列出待确认操作",
+      "expected_task_type": "alert",
+      "expected_tools": [
+        "detect_anomalies",
+        "get_alert_thresholds",
+        "search_operating_sop",
+        "build_action_candidates"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-036",
+      "category": "realtime_alert",
+      "question": "站台密度超过阈值时生成预警卡片",
+      "expected_task_type": "alert",
+      "expected_tools": [
+        "detect_anomalies",
+        "get_alert_thresholds",
+        "search_operating_sop",
+        "build_action_candidates"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-037",
+      "category": "realtime_alert",
+      "question": "摄像头客流突然升高，检索处置 SOP",
+      "expected_task_type": "alert",
+      "expected_tools": [
+        "detect_anomalies",
+        "get_alert_thresholds",
+        "search_operating_sop",
+        "build_action_candidates"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-038",
+      "category": "realtime_alert",
+      "question": "实时信号异常，请推荐通知对象",
+      "expected_task_type": "alert",
+      "expected_tools": [
+        "detect_anomalies",
+        "get_alert_thresholds",
+        "search_operating_sop",
+        "build_action_candidates"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-039",
+      "category": "realtime_alert",
+      "question": "生成高峰拥挤预警和处置优先级",
+      "expected_task_type": "alert",
+      "expected_tools": [
+        "detect_anomalies",
+        "get_alert_thresholds",
+        "search_operating_sop",
+        "build_action_candidates"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-040",
+      "category": "realtime_alert",
+      "question": "实时客流密度达到临界值，请辅助研判",
+      "expected_task_type": "alert",
+      "expected_tools": [
+        "detect_anomalies",
+        "get_alert_thresholds",
+        "search_operating_sop",
+        "build_action_candidates"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic",
+        "knowledge"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": true,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-041",
+      "category": "scheduled_report",
+      "question": "生成昨日全线网日报，与上期比较并找出异常",
+      "expected_task_type": "report",
+      "expected_tools": [
+        "query_metric",
+        "compare_metric_periods",
+        "detect_anomalies",
+        "build_daily_report"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact",
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": true,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-042",
+      "category": "scheduled_report",
+      "question": "生成早高峰日报，与上期比较并找出异常",
+      "expected_task_type": "report",
+      "expected_tools": [
+        "query_metric",
+        "compare_metric_periods",
+        "detect_anomalies",
+        "build_daily_report"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact",
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": true,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-043",
+      "category": "scheduled_report",
+      "question": "生成晚高峰日报，与上期比较并找出异常",
+      "expected_task_type": "report",
+      "expected_tools": [
+        "query_metric",
+        "compare_metric_periods",
+        "detect_anomalies",
+        "build_daily_report"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact",
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": true,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-044",
+      "category": "scheduled_report",
+      "question": "生成异常站点日报，与上期比较并找出异常",
+      "expected_task_type": "report",
+      "expected_tools": [
+        "query_metric",
+        "compare_metric_periods",
+        "detect_anomalies",
+        "build_daily_report"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact",
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": true,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-045",
+      "category": "scheduled_report",
+      "question": "生成运营客流日报，与上期比较并找出异常",
+      "expected_task_type": "report",
+      "expected_tools": [
+        "query_metric",
+        "compare_metric_periods",
+        "detect_anomalies",
+        "build_daily_report"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact",
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": true,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-046",
+      "category": "network_transfer",
+      "question": "把轨道出站后 10 分钟内公交上车定义为换乘，统计各站换乘量",
+      "expected_task_type": "transfer",
+      "expected_tools": [
+        "query_rail_transactions",
+        "query_bus_transactions",
+        "match_transfer_records",
+        "calculate_transfer_flow"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "calculate_transfer_flow",
+        "name": "window_minutes",
+        "value": 10
+      }
+    },
+    {
+      "case_id": "assistant-047",
+      "category": "network_transfer",
+      "question": "把轨道出站后 15 分钟内公交上车定义为换乘，统计各站换乘量",
+      "expected_task_type": "transfer",
+      "expected_tools": [
+        "query_rail_transactions",
+        "query_bus_transactions",
+        "match_transfer_records",
+        "calculate_transfer_flow"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "calculate_transfer_flow",
+        "name": "window_minutes",
+        "value": 15
+      }
+    },
+    {
+      "case_id": "assistant-048",
+      "category": "network_transfer",
+      "question": "把轨道出站后 20 分钟内公交上车定义为换乘，统计各站换乘量",
+      "expected_task_type": "transfer",
+      "expected_tools": [
+        "query_rail_transactions",
+        "query_bus_transactions",
+        "match_transfer_records",
+        "calculate_transfer_flow"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "calculate_transfer_flow",
+        "name": "window_minutes",
+        "value": 20
+      }
+    },
+    {
+      "case_id": "assistant-049",
+      "category": "network_transfer",
+      "question": "把轨道出站后 25 分钟内公交上车定义为换乘，统计各站换乘量",
+      "expected_task_type": "transfer",
+      "expected_tools": [
+        "query_rail_transactions",
+        "query_bus_transactions",
+        "match_transfer_records",
+        "calculate_transfer_flow"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "calculate_transfer_flow",
+        "name": "window_minutes",
+        "value": 25
+      }
+    },
+    {
+      "case_id": "assistant-050",
+      "category": "network_transfer",
+      "question": "把轨道出站后 30 分钟内公交上车定义为换乘，统计各站换乘量",
+      "expected_task_type": "transfer",
+      "expected_tools": [
+        "query_rail_transactions",
+        "query_bus_transactions",
+        "match_transfer_records",
+        "calculate_transfer_flow"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "calculate_transfer_flow",
+        "name": "window_minutes",
+        "value": 30
+      }
+    },
+    {
+      "case_id": "assistant-051",
+      "category": "network_transfer",
+      "question": "把轨道出站后 35 分钟内公交上车定义为换乘，统计各站换乘量",
+      "expected_task_type": "transfer",
+      "expected_tools": [
+        "query_rail_transactions",
+        "query_bus_transactions",
+        "match_transfer_records",
+        "calculate_transfer_flow"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "calculate_transfer_flow",
+        "name": "window_minutes",
+        "value": 35
+      }
+    },
+    {
+      "case_id": "assistant-052",
+      "category": "network_transfer",
+      "question": "把轨道出站后 40 分钟内公交上车定义为换乘，统计各站换乘量",
+      "expected_task_type": "transfer",
+      "expected_tools": [
+        "query_rail_transactions",
+        "query_bus_transactions",
+        "match_transfer_records",
+        "calculate_transfer_flow"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "calculate_transfer_flow",
+        "name": "window_minutes",
+        "value": 40
+      }
+    },
+    {
+      "case_id": "assistant-053",
+      "category": "network_transfer",
+      "question": "把轨道出站后 45 分钟内公交上车定义为换乘，统计各站换乘量",
+      "expected_task_type": "transfer",
+      "expected_tools": [
+        "query_rail_transactions",
+        "query_bus_transactions",
+        "match_transfer_records",
+        "calculate_transfer_flow"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "calculate_transfer_flow",
+        "name": "window_minutes",
+        "value": 45
+      }
+    },
+    {
+      "case_id": "assistant-054",
+      "category": "network_transfer",
+      "question": "把轨道出站后 60 分钟内公交上车定义为换乘，统计各站换乘量",
+      "expected_task_type": "transfer",
+      "expected_tools": [
+        "query_rail_transactions",
+        "query_bus_transactions",
+        "match_transfer_records",
+        "calculate_transfer_flow"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "calculate_transfer_flow",
+        "name": "window_minutes",
+        "value": 60
+      }
+    },
+    {
+      "case_id": "assistant-055",
+      "category": "network_transfer",
+      "question": "把轨道出站后 90 分钟内公交上车定义为换乘，统计各站换乘量",
+      "expected_task_type": "transfer",
+      "expected_tools": [
+        "query_rail_transactions",
+        "query_bus_transactions",
+        "match_transfer_records",
+        "calculate_transfer_flow"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic",
+      "expected_parameter": {
+        "tool": "calculate_transfer_flow",
+        "name": "window_minutes",
+        "value": 90
+      }
+    },
+    {
+      "case_id": "assistant-056",
+      "category": "geo_heatmap",
+      "question": "绘制工作日上午通勤热力图",
+      "expected_task_type": "geo",
+      "expected_tools": [
+        "geocode_stations",
+        "aggregate_flow_by_region",
+        "build_od_heatmap",
+        "build_commuting_profile"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "chart"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": true,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-057",
+      "category": "geo_heatmap",
+      "question": "生成居住区到核心商务区的 OD 热力图",
+      "expected_task_type": "geo",
+      "expected_tools": [
+        "geocode_stations",
+        "aggregate_flow_by_region",
+        "build_od_heatmap",
+        "build_commuting_profile"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "chart"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": true,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-058",
+      "category": "geo_heatmap",
+      "question": "绘制各站客流空间热力图",
+      "expected_task_type": "geo",
+      "expected_tools": [
+        "geocode_stations",
+        "aggregate_flow_by_region",
+        "build_od_heatmap",
+        "build_commuting_profile"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "chart"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": true,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-059",
+      "category": "geo_heatmap",
+      "question": "分析通勤主方向并生成热力图",
+      "expected_task_type": "geo",
+      "expected_tools": [
+        "geocode_stations",
+        "aggregate_flow_by_region",
+        "build_od_heatmap",
+        "build_commuting_profile"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "chart"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": true,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-060",
+      "category": "geo_heatmap",
+      "question": "按区域聚合客流并输出 GIS 热力数据",
+      "expected_task_type": "geo",
+      "expected_tools": [
+        "geocode_stations",
+        "aggregate_flow_by_region",
+        "build_od_heatmap",
+        "build_commuting_profile"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "chart"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": true,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-061",
+      "category": "multidimensional_statistics",
+      "question": "按票种、线路和小时统计周末客流，并找出学生票最集中时段",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_ticket_flow",
+        "rank_stations"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-062",
+      "category": "multidimensional_statistics",
+      "question": "统计学生票分线路分小时客流并排序",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_ticket_flow",
+        "rank_stations"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-063",
+      "category": "multidimensional_statistics",
+      "question": "比较成人票与学生票的小时客流贡献",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_ticket_flow",
+        "rank_stations"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-064",
+      "category": "multidimensional_statistics",
+      "question": "按票种和线路统计客流，找出最高组合",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_ticket_flow",
+        "rank_stations"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-065",
+      "category": "multidimensional_statistics",
+      "question": "查询老年票分线路客流并排序",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_ticket_flow",
+        "rank_stations"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-066",
+      "category": "multidimensional_statistics",
+      "question": "统计周末各票种小时客流并找出峰值",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_ticket_flow",
+        "rank_stations"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-067",
+      "category": "multidimensional_statistics",
+      "question": "按学生票、线路、小时生成多维客流表",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_ticket_flow",
+        "rank_stations"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-068",
+      "category": "multidimensional_statistics",
+      "question": "查询成人票使用最集中的线路和时段",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_ticket_flow",
+        "rank_stations"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-069",
+      "category": "multidimensional_statistics",
+      "question": "按票种统计客流贡献并排序",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_ticket_flow",
+        "rank_stations"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-070",
+      "category": "multidimensional_statistics",
+      "question": "生成票种、线路、小时三维统计并找出前五",
+      "expected_task_type": "query",
+      "expected_tools": [
+        "query_ticket_flow",
+        "rank_stations"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-071",
+      "category": "correlation",
+      "question": "分析客流变化与正点率之间的相关性",
+      "expected_task_type": "correlation",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "calculate_correlation",
+        "calculate_lagged_correlation"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-072",
+      "category": "correlation",
+      "question": "分析进站量和设备故障率之间的关系",
+      "expected_task_type": "correlation",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "calculate_correlation",
+        "calculate_lagged_correlation"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-073",
+      "category": "correlation",
+      "question": "计算客流与正点率的同期相关",
+      "expected_task_type": "correlation",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "calculate_correlation",
+        "calculate_lagged_correlation"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-074",
+      "category": "correlation",
+      "question": "计算客流和运营指标的滞后相关",
+      "expected_task_type": "correlation",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "calculate_correlation",
+        "calculate_lagged_correlation"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-075",
+      "category": "correlation",
+      "question": "分析出站量与设备故障率的相关性",
+      "expected_task_type": "correlation",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "calculate_correlation",
+        "calculate_lagged_correlation"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-076",
+      "category": "correlation",
+      "question": "检查换乘量和正点率是否相关",
+      "expected_task_type": "correlation",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "calculate_correlation",
+        "calculate_lagged_correlation"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-077",
+      "category": "correlation",
+      "question": "分析净流入与运营指标之间的统计关系",
+      "expected_task_type": "correlation",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "calculate_correlation",
+        "calculate_lagged_correlation"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-078",
+      "category": "correlation",
+      "question": "比较客流、正点率和故障率的相关强度",
+      "expected_task_type": "correlation",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "calculate_correlation",
+        "calculate_lagged_correlation"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-079",
+      "category": "correlation",
+      "question": "分析高峰客流变化与设备故障率之间的关系",
+      "expected_task_type": "correlation",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "calculate_correlation",
+        "calculate_lagged_correlation"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-080",
+      "category": "correlation",
+      "question": "评估客流与正点率关系，明确不能证明因果",
+      "expected_task_type": "correlation",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "calculate_correlation",
+        "calculate_lagged_correlation"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-081",
+      "category": "diagnosis",
+      "question": "昨天 1 号线晚高峰客流为什么下降",
+      "expected_task_type": "diagnosis",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "diagnose_flow_change"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-082",
+      "category": "diagnosis",
+      "question": "昨天进站客流下降的原因是什么",
+      "expected_task_type": "diagnosis",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "diagnose_flow_change"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-083",
+      "category": "diagnosis",
+      "question": "分析出站客流异常下降的可能原因",
+      "expected_task_type": "diagnosis",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "diagnose_flow_change"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-084",
+      "category": "diagnosis",
+      "question": "为什么换乘量比平时低",
+      "expected_task_type": "diagnosis",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "diagnose_flow_change"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-085",
+      "category": "diagnosis",
+      "question": "定位净流入下降的原因候选",
+      "expected_task_type": "diagnosis",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "diagnose_flow_change"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-086",
+      "category": "diagnosis",
+      "question": "昨天晚高峰客流为什么变化",
+      "expected_task_type": "diagnosis",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "diagnose_flow_change"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-087",
+      "category": "diagnosis",
+      "question": "客流骤降是否与设备异常有关，请做原因分析",
+      "expected_task_type": "diagnosis",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "diagnose_flow_change"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-088",
+      "category": "diagnosis",
+      "question": "分析站点客流下降并列出证据缺口",
+      "expected_task_type": "diagnosis",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "diagnose_flow_change"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-089",
+      "category": "diagnosis",
+      "question": "为什么昨天客流减少，给出反证和待补数据",
+      "expected_task_type": "diagnosis",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "diagnose_flow_change"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-090",
+      "category": "diagnosis",
+      "question": "对客流下降建立原因假设树",
+      "expected_task_type": "diagnosis",
+      "expected_tools": [
+        "query_metric",
+        "get_operational_indicators",
+        "diagnose_flow_change"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "fact"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": true,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-091",
+      "category": "trend",
+      "question": "分析中长期客流趋势",
+      "expected_task_type": "trend",
+      "expected_tools": [
+        "query_metric",
+        "decompose_time_series"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-092",
+      "category": "trend",
+      "question": "研判进站量短期趋势",
+      "expected_task_type": "trend",
+      "expected_tools": [
+        "query_metric",
+        "decompose_time_series"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-093",
+      "category": "trend",
+      "question": "分析出站量中期变化趋势",
+      "expected_task_type": "trend",
+      "expected_tools": [
+        "query_metric",
+        "decompose_time_series"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-094",
+      "category": "trend",
+      "question": "分解换乘量时间序列趋势",
+      "expected_task_type": "trend",
+      "expected_tools": [
+        "query_metric",
+        "decompose_time_series"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-095",
+      "category": "trend",
+      "question": "研判净流入长期趋势和不确定性",
+      "expected_task_type": "trend",
+      "expected_tools": [
+        "query_metric",
+        "decompose_time_series"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-096",
+      "category": "trend",
+      "question": "分析小时客流上升或下降趋势",
+      "expected_task_type": "trend",
+      "expected_tools": [
+        "query_metric",
+        "decompose_time_series"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-097",
+      "category": "trend",
+      "question": "比较短期、中期、长期客流趋势",
+      "expected_task_type": "trend",
+      "expected_tools": [
+        "query_metric",
+        "decompose_time_series"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-098",
+      "category": "trend",
+      "question": "生成客流趋势分解结果",
+      "expected_task_type": "trend",
+      "expected_tools": [
+        "query_metric",
+        "decompose_time_series"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-099",
+      "category": "trend",
+      "question": "分析高峰客流未来变化趋势",
+      "expected_task_type": "trend",
+      "expected_tools": [
+        "query_metric",
+        "decompose_time_series"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    },
+    {
+      "case_id": "assistant-100",
+      "category": "trend",
+      "question": "研判线网客流趋势并说明基线限制",
+      "expected_task_type": "trend",
+      "expected_tools": [
+        "query_metric",
+        "decompose_time_series"
+      ],
+      "expected_status": "completed",
+      "expected_evidence_kinds": [
+        "statistic"
+      ],
+      "required_states": [
+        "RECEIVE",
+        "UNDERSTAND",
+        "CLARIFY",
+        "PLAN",
+        "EXECUTE_TOOLS",
+        "OBSERVE",
+        "SYNTHESIZE",
+        "VERIFY",
+        "RESPOND"
+      ],
+      "artifact_required": false,
+      "human_gate": false,
+      "non_causal": false,
+      "data_scope": "synthetic"
+    }
+  ]
+}

@@ -83,13 +83,14 @@ class SyntheticApiServiceTests(unittest.TestCase):
     def test_catalog_is_derived_from_contract_fixtures(self) -> None:
         catalog = self.service.catalog()
         self.assertEqual(catalog["data_scope"], "synthetic")
-        self.assertEqual([row["id"] for row in catalog["metrics"]], [
-            "entries", "exits", "transfers", "net_inflow"
-        ])
-        self.assertEqual(catalog["lines"], ["L-A"])
+        self.assertEqual(
+            [row["id"] for row in catalog["metrics"]],
+            ["entries", "exits", "transfers", "net_inflow"],
+        )
+        self.assertEqual(catalog["lines"], ["L-A", "L-B"])
         self.assertEqual(catalog["stations"], ["S-ALPHA", "S-BETA"])
         self.assertEqual(catalog["available_dates"], ["2026-07-20"])
-        self.assertEqual(catalog["default_time_range"]["end"], "2026-07-20T10:00:00+08:00")
+        self.assertEqual(catalog["default_time_range"]["end"], "2026-07-20T19:00:00+08:00")
 
     def test_query_executes_and_writes_retrievable_audit(self) -> None:
         result = self.service.query(
@@ -106,10 +107,13 @@ class SyntheticApiServiceTests(unittest.TestCase):
                 }
             )
         )
-        self.assertEqual(result["rows"], [
-            {"station": "S-ALPHA", "entries": 375},
-            {"station": "S-BETA", "entries": 125},
-        ])
+        self.assertEqual(
+            result["rows"],
+            [
+                {"station": "S-ALPHA", "entries": 549},
+                {"station": "S-BETA", "entries": 371},
+            ],
+        )
         audit = self.service.audit(result["audit"]["audit_id"])
         self.assertEqual(audit["operation"], "query")
         self.assertEqual(audit["row_count"], 2)
@@ -141,7 +145,7 @@ class SyntheticApiServiceTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["method"], "reference_day_copy")
-        self.assertEqual(result["row_count"], 6)
+        self.assertEqual(result["row_count"], 20)
         self.assertTrue(all(row["timestamp"].startswith("2026-07-21T") for row in result["rows"]))
         self.assertTrue(all(row["scheme_id"] == 7 for row in result["rows"]))
         self.assertEqual(self.service.audit(result["audit"]["audit_id"])["operation"], "forecast")

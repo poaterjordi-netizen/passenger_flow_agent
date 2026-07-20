@@ -17,10 +17,12 @@ nav:
   - Home: index.md
   - Product boundary: sanitized_requirements.md
   - Architecture: architecture.md
+  - Governed assistant: assistant_architecture.md
   - Deterministic query loop: p1_deterministic_loop.md
   - Database and designated-day forecast: database_and_forecast.md
   - WeChat Mini Program: mobile_miniprogram.md
   - Open-source reuse assessment: open_source_reuse_assessment.md
+  - Web and deployment: web_and_deployment.md
   - Data contract: data_contract.md
   - Metric dictionary: metric_dictionary.md
   - Threat model: threat_model.md

@@ -11,6 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from metro_agent.api.app import _authorize, create_app
 from metro_agent.api.models import ForecastRequest, QueryRequest
 from metro_agent.api.settings import ApiSettings
+from metro_agent.assistant.schemas import AssistantMessageRequest, HumanFeedbackRequest
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -42,6 +43,11 @@ class ApiApplicationTests(unittest.TestCase):
         schema = self.app.openapi()
         self.assertIn("/api/v1/queries", schema["paths"])
         self.assertIn("/api/v1/forecasts/designated-day", schema["paths"])
+        self.assertIn("/api/v1/assistant/sessions", schema["paths"])
+        self.assertIn("/api/v1/assistant/sessions/{session_id}/messages", schema["paths"])
+        self.assertIn("/api/v1/assistant/runs/{run_id}", schema["paths"])
+        self.assertIn("/api/v1/assistant/runs/{run_id}/events", schema["paths"])
+        self.assertIn("/api/v1/assistant/runs/{run_id}/feedback", schema["paths"])
         serialized = json.dumps(schema)
         self.assertNotIn("arbitrary-sql", serialized)
         self.assertEqual(self.endpoint("/health", "GET")()["data_scope"], "synthetic")
@@ -50,7 +56,7 @@ class ApiApplicationTests(unittest.TestCase):
     def test_route_functions_delegate_to_synthetic_service(self) -> None:
         service = self.app.state.service
         catalog = self.endpoint("/api/v1/catalog", "GET")(service=service)
-        self.assertEqual(catalog["lines"], ["L-A"])
+        self.assertEqual(catalog["lines"], ["L-A", "L-B"])
         query_result = self.endpoint("/api/v1/queries", "POST")(
             payload=QueryRequest.model_validate(
                 {
@@ -78,7 +84,7 @@ class ApiApplicationTests(unittest.TestCase):
             ),
             service=service,
         )
-        self.assertEqual(forecast_result["row_count"], 6)
+        self.assertEqual(forecast_result["row_count"], 20)
         audit = self.endpoint("/api/v1/audits/{audit_id}", "GET")(
             audit_id=query_result["audit"]["audit_id"], service=service
         )
@@ -89,8 +95,40 @@ class ApiApplicationTests(unittest.TestCase):
             )
         self.assertEqual(raised.exception.status_code, 404)
 
+    def test_assistant_routes_complete_and_replay_a_run(self) -> None:
+        assistant = self.app.state.assistant
+        session = self.endpoint("/api/v1/assistant/sessions", "POST")(assistant=assistant)
+        run = self.endpoint("/api/v1/assistant/sessions/{session_id}/messages", "POST")(
+            payload=AssistantMessageRequest(message="查询各站进站客流"),
+            session_id=session["session_id"],
+            assistant=assistant,
+        )
+        self.assertEqual(run["status"], "completed")
+        self.assertTrue(run["verification"]["valid"])
+        replay = self.endpoint("/api/v1/assistant/runs/{run_id}", "GET")(
+            run_id=run["run_id"], assistant=assistant
+        )
+        events = self.endpoint("/api/v1/assistant/runs/{run_id}/events", "GET")(
+            run_id=run["run_id"], assistant=assistant
+        )
+        self.assertEqual(replay["run_id"], run["run_id"])
+        self.assertEqual(events[-1]["state"], "RESPOND")
+        feedback = self.endpoint("/api/v1/assistant/runs/{run_id}/feedback", "POST")(
+            payload=HumanFeedbackRequest(
+                correction="人工复核后采纳",
+                accepted=True,
+                adopted_response=run["response"],
+            ),
+            run_id=run["run_id"],
+            assistant=assistant,
+        )
+        self.assertTrue(feedback["dataset_eligibility"]["eligible"])
+        self.assertEqual(feedback["events"][-1]["state"], "HUMAN_FEEDBACK")
+
     def test_access_token_is_optional_and_constant_time_checked(self) -> None:
-        request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(settings=self.settings)))
+        request = SimpleNamespace(
+            app=SimpleNamespace(state=SimpleNamespace(settings=self.settings))
+        )
         self.assertIsNone(_authorize(request, None))
 
         protected = SimpleNamespace(
@@ -129,7 +167,12 @@ class ApiApplicationTests(unittest.TestCase):
             cors_origins=("https://example.test",),
         )
         application = create_app(cors_settings)
-        self.assertTrue(any(middleware.cls.__name__ == "CORSMiddleware" for middleware in application.user_middleware))
+        self.assertTrue(
+            any(
+                middleware.cls.__name__ == "CORSMiddleware"
+                for middleware in application.user_middleware
+            )
+        )
 
 
 if __name__ == "__main__":

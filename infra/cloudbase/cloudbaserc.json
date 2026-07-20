@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
+  "envId": "sun-agent-d7gj2ywcr70c528b4",
+  "functionRoot": "functions",
+  "functions": [
+    {
+      "name": "metroAgentApi",
+      "description": "Synthetic-only governed metro passenger-flow API",
+      "handler": "index.main",
+      "runtime": "Python3.11",
+      "timeout": 10,
+      "memorySize": 256,
+      "installDependency": false,
+      "envVariables": {
+        "METRO_AGENT_ENV": "cloudbase"
+      }
+    }
+  ]
+}

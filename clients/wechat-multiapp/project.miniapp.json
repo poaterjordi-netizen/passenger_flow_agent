@@ -1,0 +1,71 @@
+{
+  "miniVersion": "v2",
+  "name": "客流智控",
+  "version": "0.1.0",
+  "versionCode": 1,
+  "i18nFilePath": "i18n",
+  "mini-ohos": {
+    "bundleName": "com.sunxb.metroflow",
+    "sdkVersion": "0.5.1"
+  },
+  "mini-android": {
+    "packageName": "com.sunxb.metroflow",
+    "resourcePath": "miniapp/android/nativeResources",
+    "sdkVersion": "1.7.0",
+    "toolkitVersion": "0.11.0",
+    "useExtendedSdk": {
+      "media": false,
+      "bluetooth": false,
+      "network": false,
+      "scanner": false,
+      "xweb": false
+    },
+    "icons": {
+      "hdpi": "",
+      "xhdpi": "",
+      "xxhdpi": "",
+      "xxxhdpi": ""
+    },
+    "splashscreen": {
+      "hdpi": "",
+      "xhdpi": "",
+      "xxhdpi": ""
+    },
+    "enableVConsole": "open",
+    "privacy": {
+      "enable": true
+    }
+  },
+  "mini-ios": {
+    "bundleId": "com.sunxb.metroflow",
+    "sdkVersion": "1.7.0",
+    "toolkitVersion": "0.0.9",
+    "useExtendedSdk": {
+      "WeAppOpenFuns": true,
+      "WeAppNetwork": false,
+      "WeAppBluetooth": false,
+      "WeAppMedia": false,
+      "WeAppLBS": false,
+      "WeAppOthers": false
+    },
+    "enableVConsole": "open",
+    "icons": {
+      "mainIcon120": "",
+      "mainIcon180": "",
+      "spotlightIcon80": "",
+      "spotlightIcon120": "",
+      "settingsIcon58": "",
+      "settingsIcon87": "",
+      "notificationIcon40": "",
+      "notificationIcon60": "",
+      "appStore1024": ""
+    },
+    "splashScreen": {
+      "customImage": ""
+    },
+    "privacy": {
+      "enable": false
+    },
+    "enableOpenUrlNavigate": true
+  }
+}

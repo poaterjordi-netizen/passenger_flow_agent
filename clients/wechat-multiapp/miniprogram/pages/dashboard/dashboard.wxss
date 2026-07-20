@@ -1,0 +1,138 @@
+.error-action {
+  margin-top: 10rpx;
+}
+
+.metric-grid {
+  display: grid;
+  gap: 18rpx;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.metric-card {
+  background: #ffffff;
+  border: 1rpx solid #e5ece9;
+  border-radius: 26rpx;
+  box-shadow: 0 8rpx 26rpx rgba(30, 74, 70, 0.06);
+  box-sizing: border-box;
+  min-height: 184rpx;
+  padding: 26rpx;
+  position: relative;
+}
+
+.metric-card::before {
+  background: #0f6b63;
+  border-radius: 99rpx;
+  content: "";
+  height: 8rpx;
+  left: 26rpx;
+  position: absolute;
+  top: 0;
+  width: 52rpx;
+}
+
+.metric-exits::before { background: #2b7db7; }
+.metric-transfers::before { background: #e29b3d; }
+.metric-net_inflow::before { background: #925fb3; }
+
+.metric-label {
+  color: #6d7f7c;
+  font-size: 23rpx;
+}
+
+.metric-value {
+  color: #173735;
+  font-size: 44rpx;
+  font-weight: 850;
+  letter-spacing: -1rpx;
+  margin-top: 14rpx;
+}
+
+.metric-unit {
+  color: #92a09e;
+  font-size: 20rpx;
+  margin-top: 4rpx;
+}
+
+.ranking-card {
+  padding-bottom: 10rpx;
+  padding-top: 10rpx;
+}
+
+.ranking-row {
+  align-items: center;
+  border-bottom: 1rpx solid #edf1ef;
+  display: flex;
+  min-height: 92rpx;
+}
+
+.ranking-row:last-child { border-bottom: 0; }
+
+.rank {
+  align-items: center;
+  background: #e5efed;
+  border-radius: 14rpx;
+  color: #53706c;
+  display: flex;
+  font-size: 22rpx;
+  font-weight: 800;
+  height: 42rpx;
+  justify-content: center;
+  width: 42rpx;
+}
+
+.rank-1 { background: #fff0d8; color: #a56218; }
+.rank-2 { background: #e8edef; color: #50656a; }
+.rank-3 { background: #f3e5da; color: #8a5732; }
+
+.station-name {
+  flex: 1;
+  font-size: 27rpx;
+  font-weight: 650;
+  margin-left: 22rpx;
+}
+
+.station-value {
+  color: #0f6b63;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.station-value text {
+  color: #879895;
+  font-size: 19rpx;
+  font-weight: 500;
+}
+
+.quick-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-top: 18rpx;
+}
+
+.quick-card {
+  align-items: center;
+  background: #ffffff;
+  border: 1rpx solid #e5ece9;
+  border-radius: 24rpx;
+  display: flex;
+  padding: 24rpx;
+}
+
+.quick-mark {
+  align-items: center;
+  background: #dff0ec;
+  border-radius: 18rpx;
+  color: #0f6b63;
+  display: flex;
+  font-size: 28rpx;
+  font-weight: 900;
+  height: 72rpx;
+  justify-content: center;
+  margin-right: 22rpx;
+  width: 72rpx;
+}
+
+.forecast-mark { background: #fff0da; color: #b66a18; }
+.quick-title { font-size: 27rpx; font-weight: 750; }
+.quick-note { color: #7b8c89; font-size: 21rpx; margin-top: 6rpx; }

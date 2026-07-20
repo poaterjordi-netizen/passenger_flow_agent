@@ -1,0 +1,9 @@
+{
+  "name": "metro-agent-api-wechat",
+  "version": "0.3.0",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": ">=18"
+  }
+}

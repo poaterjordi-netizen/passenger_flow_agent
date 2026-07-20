@@ -1,0 +1,47 @@
+name: metro-passenger-flow
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      METRO_AGENT_ENV: ${METRO_AGENT_ENV:-container}
+      METRO_API_AUDIT_DIR: /app/artifacts/api-audits
+    volumes:
+      - metro-audits:/app/artifacts/api-audits
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  frontend:
+    build:
+      context: ./clients/web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ""
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${METRO_WEB_BIND:-127.0.0.1}:${METRO_WEB_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  metro-audits:

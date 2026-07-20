@@ -10,10 +10,13 @@ Page({
   data: {
     accessToken: "",
     apiBaseUrl: "",
+    cloudEnvId: "",
+    cloudFunctionName: "",
     error: "",
     health: null,
     showToken: false,
-    testing: false
+    testing: false,
+    transport: "cloudbase"
   },
 
   onShow() {
@@ -21,22 +24,28 @@ Page({
     this.setData({
       accessToken: config.accessToken,
       apiBaseUrl: config.apiBaseUrl,
+      cloudEnvId: config.cloudEnvId,
+      cloudFunctionName: config.cloudFunctionName,
       error: "",
-      health: null
+      health: null,
+      transport: config.transport
     })
   },
 
   onBaseUrlInput(event) { this.setData({ apiBaseUrl: event.detail.value }) },
   onTokenInput(event) { this.setData({ accessToken: event.detail.value }) },
   toggleToken() { this.setData({ showToken: !this.data.showToken }) },
+  useCloudbase() { this.setData({ transport: "cloudbase", error: "", health: null }) },
+  useHttp() { this.setData({ transport: "http", error: "", health: null }) },
 
   validateAndSave() {
     const apiBaseUrl = normalizeBaseUrl(this.data.apiBaseUrl)
-    if (!/^https?:\/\/[^\s]+$/.test(apiBaseUrl)) {
+    if (this.data.transport === "http" && !/^https?:\/\/[^\s]+$/.test(apiBaseUrl)) {
       this.setData({ error: "API 地址必须以 http:// 或 https:// 开头" })
       return null
     }
     const value = saveRuntimeConfig({
+      transport: this.data.transport,
       apiBaseUrl,
       accessToken: this.data.accessToken
     })

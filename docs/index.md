@@ -20,6 +20,7 @@ language-model interpretation separate from deterministic validation and executi
 - [Read-only database and designated-day forecast](database_and_forecast.md)
 - [WeChat Mini Program and synthetic API](mobile_miniprogram.md)
 - [Open-source frontend and backend reuse assessment](open_source_reuse_assessment.md)
+- [Web frontend and server deployment](web_and_deployment.md)
 - [Data contract](data_contract.md)
 - [Metric dictionary](metric_dictionary.md)
 - [Threat model](threat_model.md)

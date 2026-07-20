@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "display_name": "客流智控",
+  "version": "0.1.0",
+  "version_code": 1,
+  "wechat_miniprogram_app_id": "wxcec9562590faa1a0",
+  "package_names": {
+    "android": "com.sunxb.metroflow",
+    "ios": "com.sunxb.metroflow",
+    "harmonyos": "com.sunxb.metroflow"
+  },
+  "targets": ["android", "ios", "harmonyos"],
+  "data_mode": "embedded-synthetic-read-only"
+}

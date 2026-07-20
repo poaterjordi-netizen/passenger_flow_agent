@@ -37,12 +37,8 @@ class ApiSettings:
         data_dir = _resolved_path(
             env.get("METRO_AGENT_DATA_DIR"), root / "examples" / "synthetic_data"
         )
-        metrics_path = _resolved_path(
-            env.get("METRO_API_METRICS_PATH"), data_dir / "metrics.json"
-        )
-        data_path = _resolved_path(
-            env.get("METRO_API_DATA_PATH"), data_dir / "passenger_flow.csv"
-        )
+        metrics_path = _resolved_path(env.get("METRO_API_METRICS_PATH"), data_dir / "metrics.json")
+        data_path = _resolved_path(env.get("METRO_API_DATA_PATH"), data_dir / "passenger_flow.csv")
         audit_dir = _resolved_path(
             env.get("METRO_API_AUDIT_DIR"), root / "artifacts" / "api-audits"
         )

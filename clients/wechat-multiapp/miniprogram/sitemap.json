@@ -1,0 +1,6 @@
+{
+  "desc": "The first version is an internal synthetic-data experience client.",
+  "rules": [
+    {"action": "disallow", "page": "*"}
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "pages": [
+    "pages/dashboard/dashboard",
+    "pages/query/query",
+    "pages/forecast/forecast",
+    "pages/settings/settings",
+    "pages/audit/audit"
+  ],
+  "window": {
+    "backgroundColor": "#f3f6f4",
+    "backgroundTextStyle": "dark",
+    "navigationBarBackgroundColor": "#103c3b",
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "客流智控"
+  },
+  "tabBar": {
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black",
+    "color": "#788785",
+    "selectedColor": "#0f6b63",
+    "list": [
+      {"pagePath": "pages/dashboard/dashboard", "text": "总览"},
+      {"pagePath": "pages/query/query", "text": "查询"},
+      {"pagePath": "pages/forecast/forecast", "text": "预测"},
+      {"pagePath": "pages/settings/settings", "text": "设置"}
+    ]
+  },
+  "sitemapLocation": "sitemap.json",
+  "style": "v2"
+}

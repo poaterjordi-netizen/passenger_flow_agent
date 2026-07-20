@@ -15,7 +15,7 @@ class ContractTests(unittest.TestCase):
     def test_repository_fixtures_validate(self) -> None:
         self.assertEqual(
             validate_repository_contracts(METRICS, GOLD_CASES, DATA),
-            {"metrics": 4, "gold_cases": 2, "data_rows": 6},
+            {"metrics": 4, "gold_cases": 2, "data_rows": 20},
         )
 
     def test_unknown_metric_fails_closed(self) -> None:

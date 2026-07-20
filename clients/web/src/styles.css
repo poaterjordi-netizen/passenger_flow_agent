@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --shadow-card: 0 20px 55px rgba(1, 8, 18, 0.22);
+}
+
+:root {
+  color: #e5edf7;
+  background: #06101d;
+  font-family: var(--font-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+html {
+  min-width: 320px;
+  background: #06101d;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+button,
+input,
+select {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+
+body::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  background:
+    radial-gradient(circle at 10% 0%, rgba(8, 145, 178, 0.18), transparent 30%),
+    radial-gradient(circle at 95% 20%, rgba(37, 99, 235, 0.12), transparent 32%),
+    linear-gradient(180deg, #06101d 0%, #071421 55%, #08111d 100%);
+}
+
+::selection {
+  color: #06101d;
+  background: #67e8f9;
+}
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #2b3a4f;
+  background-clip: padding-box;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.data-table th {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: #8292a8;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.data-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+.data-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.025);
+}

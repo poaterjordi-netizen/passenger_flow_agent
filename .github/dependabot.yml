@@ -40,3 +40,15 @@ updates:
     labels:
       - dependencies
       - documentation
+
+  - package-ecosystem: npm
+    directory: /clients/web
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:45"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - frontend

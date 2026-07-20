@@ -16,6 +16,25 @@ dist/
 # Developer-specific WeChat DevTools settings and generated packages
 clients/wechat-miniprogram/project.private.config.json
 clients/wechat-miniprogram/*.wxapkg
+clients/wechat-miniprogram/cloudfunctions/
+clients/wechat-multiapp/project.private.config.json
+clients/wechat-multiapp/miniapp/
+clients/wechat-multiapp/build/
+clients/wechat-multiapp/dist/
+clients/wechat-multiapp/*.apk
+clients/wechat-multiapp/*.aab
+clients/wechat-multiapp/*.ipa
+clients/wechat-multiapp/*.hap
+clients/wechat-multiapp/**/*.keystore
+clients/wechat-multiapp/**/*.jks
+clients/wechat-multiapp/**/*.p12
+clients/wechat-multiapp/**/*.mobileprovision
+clients/wechat-multiapp/**/*.provisionprofile
+clients/wechat-multiapp/**/*.p7b
+clients/wechat-multiapp/**/*.cer
+clients/wechat-multiapp/**/*.csr
+clients/wechat-multiapp/**/*.pem
+clients/wechat-multiapp/**/*.key
 
 # Never commit operational or sensitive material
 data/raw/

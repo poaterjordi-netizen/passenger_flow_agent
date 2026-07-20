@@ -19,12 +19,23 @@ from metro_agent.api.models import (
 )
 from metro_agent.api.service import SyntheticApiService
 from metro_agent.api.settings import ApiSettings
+from metro_agent.assistant.orchestrator import AssistantService
+from metro_agent.assistant.schemas import (
+    AssistantMessageRequest,
+    HumanFeedbackRequest,
+    RunRecord,
+    SessionRecord,
+)
 
 _bearer = HTTPBearer(auto_error=False)
 
 
 def _service(request: Request) -> SyntheticApiService:
     return request.app.state.service
+
+
+def _assistant(request: Request) -> AssistantService:
+    return request.app.state.assistant
 
 
 def _authorize(
@@ -55,6 +66,10 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
     )
     application.state.settings = runtime
     application.state.service = SyntheticApiService(runtime)
+    application.state.assistant = AssistantService(
+        application.state.service,
+        runtime.audit_dir.parent / "assistant",
+    )
 
     if runtime.cors_origins:
         application.add_middleware(
@@ -93,14 +108,10 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         return service.catalog()
 
     @router.post("/queries", response_model=QueryResponse, tags=["queries"])
-    def query(
-        payload: QueryRequest, service: SyntheticApiService = Depends(_service)
-    ) -> dict:
+    def query(payload: QueryRequest, service: SyntheticApiService = Depends(_service)) -> dict:
         return service.query(payload)
 
-    @router.post(
-        "/forecasts/designated-day", response_model=ForecastResponse, tags=["forecasts"]
-    )
+    @router.post("/forecasts/designated-day", response_model=ForecastResponse, tags=["forecasts"])
     def forecast(
         payload: ForecastRequest, service: SyntheticApiService = Depends(_service)
     ) -> dict:
@@ -115,6 +126,74 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
             return service.audit(audit_id)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="audit not found") from exc
+
+    @router.post(
+        "/assistant/sessions",
+        response_model=SessionRecord,
+        tags=["assistant"],
+    )
+    def create_assistant_session(
+        assistant: AssistantService = Depends(_assistant),
+    ) -> dict:
+        return assistant.create_session()
+
+    @router.post(
+        "/assistant/sessions/{session_id}/messages",
+        response_model=RunRecord,
+        tags=["assistant"],
+    )
+    def assistant_message(
+        payload: AssistantMessageRequest,
+        session_id: str = Path(pattern=r"^session-[0-9a-f]{32}$"),
+        assistant: AssistantService = Depends(_assistant),
+    ) -> dict:
+        try:
+            return assistant.message(session_id, payload)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="assistant session not found") from exc
+
+    @router.get(
+        "/assistant/runs/{run_id}",
+        response_model=RunRecord,
+        tags=["assistant"],
+    )
+    def assistant_run(
+        run_id: str = Path(pattern=r"^run-[0-9a-f]{32}$"),
+        assistant: AssistantService = Depends(_assistant),
+    ) -> dict:
+        try:
+            return assistant.get_run(run_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="assistant run not found") from exc
+
+    @router.get(
+        "/assistant/runs/{run_id}/events",
+        response_model=list[dict],
+        tags=["assistant"],
+    )
+    def assistant_events(
+        run_id: str = Path(pattern=r"^run-[0-9a-f]{32}$"),
+        assistant: AssistantService = Depends(_assistant),
+    ) -> list[dict]:
+        try:
+            return assistant.get_events(run_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="assistant run not found") from exc
+
+    @router.post(
+        "/assistant/runs/{run_id}/feedback",
+        response_model=RunRecord,
+        tags=["assistant"],
+    )
+    def assistant_feedback(
+        payload: HumanFeedbackRequest,
+        run_id: str = Path(pattern=r"^run-[0-9a-f]{32}$"),
+        assistant: AssistantService = Depends(_assistant),
+    ) -> dict:
+        try:
+            return assistant.record_feedback(run_id, payload)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="assistant run not found") from exc
 
     application.include_router(router)
     return application
