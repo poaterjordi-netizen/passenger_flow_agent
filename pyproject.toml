@@ -4,13 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "metro-passenger-flow-agent"
-version = "0.2.0"
+version = "0.3.0"
 description = "Governed metro passenger-flow query agent"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "Proprietary"}
 authors = [{name = "Project team"}]
-dependencies = []
+dependencies = [
+    "pandas>=2.2,<3",
+    "PyMySQL>=1.1,<2",
+]
 
 [project.scripts]
 metro-agent = "metro_agent.cli:main"

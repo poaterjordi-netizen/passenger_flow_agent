@@ -17,11 +17,13 @@ question
   -> evidence-backed response + audit record
 ```
 
-## P0/P1 components
+## Components
 
 - `contracts.py`: validates metric registry, Gold Cases, and synthetic data.
 - `query_engine.py`: compiles allowlisted QueryIR to parameterized SQL, loads the synthetic SQLite store, executes deterministic aggregates, verifies Gold Cases, and writes audit artifacts.
-- `cli.py`: exposes `validate`, `query`, and `eval` commands.
+- `database.py`: injects runtime-only MySQL settings, compiles fixed station/OD queries, requires TLS and read-only transactions, enforces limits, and writes redacted audits.
+- `forecasting.py`: contains the reusable, database-write-free designated-day station-flow transformation ported from the active legacy path.
+- `cli.py`: exposes synthetic validation/evaluation, bounded database queries, metadata inspection, and designated-day forecast commands.
 - `schemas/`: machine-readable contracts for QueryIR and Gold Cases.
 - `examples/synthetic_data/`: non-sensitive baseline fixtures.
 - `tests/`: contract and repository-boundary checks.
@@ -39,6 +41,7 @@ question
 
 - P0: contracts and synthetic fixtures — complete.
 - P1: deterministic QueryIR-to-result loop on synthetic data — complete.
+- P1.5: bounded MySQL adapter and designated-day baseline forecast — implemented; real-data use remains explicitly authorized and local-artifact only.
 - P2: bounded natural-language-to-QueryIR layer and adversarial evaluation.
-- P3: explicitly authorized read-only, sanitized real-data pilot.
+- P3: dedicated least-privilege database identity, verified server CA, sanitized real-data Gold Cases, and cost/timeout evaluation.
 - P4: private collaboration, CI hardening, and internal integration.

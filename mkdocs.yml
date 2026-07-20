@@ -18,6 +18,7 @@ nav:
   - Product boundary: sanitized_requirements.md
   - Architecture: architecture.md
   - Deterministic query loop: p1_deterministic_loop.md
+  - Database and designated-day forecast: database_and_forecast.md
   - Data contract: data_contract.md
   - Metric dictionary: metric_dictionary.md
   - Threat model: threat_model.md

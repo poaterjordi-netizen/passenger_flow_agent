@@ -19,6 +19,11 @@ class RepositoryBoundaryTests(unittest.TestCase):
         self.assertIn("synthetic", readme)
         self.assertIn("does not", readme)
 
+    def test_example_environment_keeps_database_password_empty(self) -> None:
+        lines = (ROOT / ".env.example").read_text(encoding="utf-8").splitlines()
+        password_lines = [line for line in lines if line.startswith("METRO_DB_PASSWORD=")]
+        self.assertEqual(password_lines, ["METRO_DB_PASSWORD="])
+
 
 if __name__ == "__main__":
     unittest.main()

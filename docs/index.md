@@ -8,14 +8,16 @@ language-model interpretation separate from deterministic validation and executi
 - All natural-language requests must compile to constrained `QueryIR` before execution.
 - Metrics are registered in `examples/synthetic_data/metrics.json`.
 - Contract and Gold Case validation is deterministic and machine-checkable.
-- P0 and P1 use synthetic data only; no production database or credential is required.
+- Synthetic fixtures remain the default deterministic baseline.
 - Query execution uses fixed templates and parameter binding, never free-form model SQL.
+- Optional real-database commands use runtime-only credentials, TLS, a read-only transaction, row limits, rollback-only cleanup, and redacted audits.
 
 ## Documentation map
 
 - [Product boundary](sanitized_requirements.md)
 - [Architecture](architecture.md)
 - [Deterministic query loop](p1_deterministic_loop.md)
+- [Read-only database and designated-day forecast](database_and_forecast.md)
 - [Data contract](data_contract.md)
 - [Metric dictionary](metric_dictionary.md)
 - [Threat model](threat_model.md)

@@ -7,7 +7,7 @@
 
 Governed passenger-flow query agent for metro operations. The repository separates deterministic contracts and verification from any future language-model layer.
 
-## P1 status
+## Current status
 
 P0 established the product boundary and executable contracts. P1 adds the deterministic query loop:
 
@@ -18,7 +18,11 @@ P0 established the product boundary and executable contracts. P1 adds the determ
 - mandatory per-query audit artifacts with a parameterized SQL template and traceable synthetic QueryIR;
 - local CLI, tests, security checks, and CI smoke coverage.
 
-P1 does **not** parse free-form language, connect production systems, execute arbitrary SQL, send notifications, deploy services, or claim production accuracy. Natural-language-to-`QueryIR` belongs to P2.
+Version 0.3 adds an explicit, bounded MySQL adapter and ports the active designated-day forecast from the supplied legacy script. The adapter uses runtime-only credentials, verified TLS by default, read-only transactions, fixed parameterized queries, truncation detection, rollback-only cleanup, and paired redacted audit artifacts. It does not expose arbitrary SQL or any database write path.
+
+The designated-day forecast copies the station inflow/outflow pattern from a reference date to a target calendar date and adds the scheme metadata. It returns a local CSV/JSON artifact; it does not insert forecasts or update scheme state.
+
+The project still does **not** parse free-form language into production queries, execute model-generated SQL, send notifications, deploy services, or claim production prediction accuracy. Natural-language-to-`QueryIR` remains behind a later human gate.
 
 ## Quick start
 
@@ -43,7 +47,7 @@ metro-agent eval \
 python3 -m unittest discover -s tests -v
 ```
 
-No third-party runtime dependencies are required for P0 or P1.
+Read-only database and forecast usage is documented in [`docs/database_and_forecast.md`](docs/database_and_forecast.md). Credentials are injected at runtime and never committed.
 
 ## Engineering services
 
