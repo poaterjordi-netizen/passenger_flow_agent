@@ -1,0 +1,35 @@
+name: Bug report
+description: Report reproducible incorrect or unsafe behavior.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials, production data, or private schemas.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and the expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Synthetic reproduction
+      description: Provide minimal steps using only repository fixtures or sanitized synthetic data.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized output
+      description: Paste relevant CLI output or tracebacks after removing sensitive material.
+      render: shell
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: Safety check
+      options:
+        - label: This report contains no credentials, private schemas, or production data.
+          required: true

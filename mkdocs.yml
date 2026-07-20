@@ -1,0 +1,32 @@
+site_name: Metro Passenger Flow Agent
+site_description: Governed, deterministic passenger-flow query contracts and tooling.
+site_url: https://passenger-flow-agent.readthedocs.io/
+repo_url: https://github.com/poaterjordi-netizen/passenger_flow_agent
+repo_name: poaterjordi-netizen/passenger_flow_agent
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Product boundary: sanitized_requirements.md
+  - Architecture: architecture.md
+  - Deterministic query loop: p1_deterministic_loop.md
+  - Data contract: data_contract.md
+  - Metric dictionary: metric_dictionary.md
+  - Threat model: threat_model.md
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - toc:
+      permalink: true
