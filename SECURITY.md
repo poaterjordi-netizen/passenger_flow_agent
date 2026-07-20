@@ -6,7 +6,7 @@ Only synthetic data is permitted. Production credentials, internal hostnames, da
 
 ## Query safety baseline
 
-Future execution must use a read-only database identity, compile constrained `QueryIR` deterministically, allowlist metrics/dimensions/operators, parameterize values, cap rows and time, and record an audit artifact. DDL, DML, multi-statement SQL, comments, unbounded export, and model-generated free-form SQL are prohibited.
+P1 compiles constrained `QueryIR` deterministically, allowlists metrics/dimensions/operators, parameterizes values, caps rows and time, and records an audit artifact against an in-memory synthetic store. DDL, DML, multi-statement SQL, comments, unbounded export, and model-generated free-form SQL are prohibited. A future production adapter must additionally enforce a read-only database identity, row/column policy, query cost limits, timeouts, and audit redaction.
 
 ## Human gates
 

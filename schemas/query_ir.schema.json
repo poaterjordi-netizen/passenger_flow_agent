@@ -30,7 +30,17 @@
         "properties": {
           "field": {"enum": ["line_id", "station_id", "direction"]},
           "operator": {"enum": ["eq", "in"]},
-          "value": {}
+          "value": {
+            "oneOf": [
+              {"type": "string", "minLength": 1},
+              {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 100,
+                "items": {"type": "string", "minLength": 1}
+              }
+            ]
+          }
         }
       }
     },

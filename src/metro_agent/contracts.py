@@ -10,7 +10,13 @@ ALLOWED_DIMENSIONS = {"line", "station", "direction", "time"}
 ALLOWED_FILTER_FIELDS = {"line_id", "station_id", "direction"}
 ALLOWED_OPERATORS = {"eq", "in"}
 REQUIRED_DATA_FIELDS = {
-    "timestamp", "line_id", "station_id", "direction", "entries", "exits", "transfers"
+    "timestamp",
+    "line_id",
+    "station_id",
+    "direction",
+    "entries",
+    "exits",
+    "transfers",
 }
 
 
@@ -83,8 +89,23 @@ def validate_query_ir(query: Any, registry: dict[str, dict[str, Any]], label: st
             raise ValueError(f"{label}: invalid filter shape")
         if item["field"] not in ALLOWED_FILTER_FIELDS or item["operator"] not in ALLOWED_OPERATORS:
             raise ValueError(f"{label}: filter is not allowlisted")
-        if item["operator"] == "in" and not isinstance(item["value"], list):
-            raise ValueError(f"{label}: 'in' filter value must be a list")
+        value = item["value"]
+        if item["operator"] == "eq":
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"{label}: 'eq' filter value must be a non-empty string")
+            values = [value]
+        else:
+            if (
+                not isinstance(value, list)
+                or not 1 <= len(value) <= 100
+                or any(not isinstance(entry, str) or not entry for entry in value)
+            ):
+                raise ValueError(
+                    f"{label}: 'in' filter value must contain 1 to 100 non-empty strings"
+                )
+            values = value
+        if item["field"] == "direction" and not set(values) <= {"up", "down", "na"}:
+            raise ValueError(f"{label}: invalid direction filter value")
     limit = query["limit"]
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 1000:
         raise ValueError(f"{label}: limit must be an integer from 1 to 1000")
@@ -109,7 +130,11 @@ def validate_gold_cases(path: Path, registry: dict[str, dict[str, Any]]) -> int:
             raise ValueError(f"{case_id}: question is required")
         validate_query_ir(case.get("query_ir"), registry, case_id)
         expected = case.get("expected")
-        if not isinstance(expected, dict) or expected.get("status") not in {"answer", "clarify", "reject"}:
+        if not isinstance(expected, dict) or expected.get("status") not in {
+            "answer",
+            "clarify",
+            "reject",
+        }:
             raise ValueError(f"{case_id}: invalid expected status")
         if not isinstance(case.get("risk_tags"), list):
             raise ValueError(f"{case_id}: risk_tags must be a list")
@@ -131,7 +156,9 @@ def validate_passenger_flow_csv(path: Path) -> int:
                 try:
                     value = int(row[field])
                 except ValueError as exc:
-                    raise ValueError(f"data line {line_number}: {field} must be an integer") from exc
+                    raise ValueError(
+                        f"data line {line_number}: {field} must be an integer"
+                    ) from exc
                 if value < 0:
                     raise ValueError(f"data line {line_number}: {field} must be non-negative")
             key = (row["timestamp"], row["line_id"], row["station_id"], row["direction"])

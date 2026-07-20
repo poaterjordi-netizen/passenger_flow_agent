@@ -42,6 +42,36 @@ class ContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "duplicate case_id"):
                 validate_repository_contracts(METRICS, broken, DATA)
 
+    def test_empty_in_filter_fails_closed(self) -> None:
+        registry = {"entries": {"dimensions": ["station"]}}
+        query = {
+            "metric": "entries",
+            "time_range": {
+                "start": "2026-07-20T08:00:00+08:00",
+                "end": "2026-07-20T09:00:00+08:00",
+            },
+            "dimensions": [],
+            "filters": [{"field": "line_id", "operator": "in", "value": []}],
+            "limit": 10,
+        }
+        with self.assertRaisesRegex(ValueError, "1 to 100 non-empty strings"):
+            validate_query_ir(query, registry, "test")
+
+    def test_invalid_direction_filter_fails_closed(self) -> None:
+        registry = {"entries": {"dimensions": ["direction"]}}
+        query = {
+            "metric": "entries",
+            "time_range": {
+                "start": "2026-07-20T08:00:00+08:00",
+                "end": "2026-07-20T09:00:00+08:00",
+            },
+            "dimensions": [],
+            "filters": [{"field": "direction", "operator": "eq", "value": "sideways"}],
+            "limit": 10,
+        }
+        with self.assertRaisesRegex(ValueError, "invalid direction"):
+            validate_query_ir(query, registry, "test")
+
 
 if __name__ == "__main__":
     unittest.main()

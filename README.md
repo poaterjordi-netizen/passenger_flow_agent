@@ -2,17 +2,18 @@
 
 Governed passenger-flow query agent for metro operations. The repository separates deterministic contracts and verification from any future language-model layer.
 
-## P0 status
+## P1 status
 
-P0 establishes the product boundary and executable contracts:
+P0 established the product boundary and executable contracts. P1 adds the deterministic query loop:
 
-- sanitized requirements and architecture;
-- metric dictionary and passenger-flow data contract;
-- constrained `QueryIR` and Gold Case schemas;
-- synthetic passenger-flow data and Gold Cases;
-- local contract validator, tests, security policy, and CI.
+- validated `QueryIR` compiled to fixed, parameterized SQL templates;
+- an in-memory synthetic SQLite store built from the validated CSV fixture;
+- deterministic aggregation for entries, exits, transfers, and net inflow;
+- exact Gold Case verification and pre-execution rejection of blocked risk tags;
+- mandatory per-query audit artifacts with a parameterized SQL template and traceable synthetic QueryIR;
+- local CLI, tests, security checks, and CI smoke coverage.
 
-P0 does **not** connect production systems, execute arbitrary SQL, send notifications, deploy services, or claim model accuracy. P1 will implement the deterministic query loop against synthetic data.
+P1 does **not** parse free-form language, connect production systems, execute arbitrary SQL, send notifications, deploy services, or claim production accuracy. Natural-language-to-`QueryIR` belongs to P2.
 
 ## Quick start
 
@@ -20,11 +21,24 @@ P0 does **not** connect production systems, execute arbitrary SQL, send notifica
 python3 -m venv .venv
 . .venv/bin/activate
 python3 -m pip install -e .
-metro-agent validate   --metrics examples/synthetic_data/metrics.json   --gold-cases examples/synthetic_data/gold_cases.json   --data examples/synthetic_data/passenger_flow.csv
+metro-agent validate \
+  --metrics examples/synthetic_data/metrics.json \
+  --gold-cases examples/synthetic_data/gold_cases.json \
+  --data examples/synthetic_data/passenger_flow.csv
+metro-agent query \
+  --metrics examples/synthetic_data/metrics.json \
+  --data examples/synthetic_data/passenger_flow.csv \
+  --query-ir examples/query_ir/entries_by_station.json \
+  --audit /tmp/metro-query-audit.json
+metro-agent eval \
+  --metrics examples/synthetic_data/metrics.json \
+  --data examples/synthetic_data/passenger_flow.csv \
+  --gold-cases examples/synthetic_data/gold_cases.json \
+  --report /tmp/metro-p1-eval.json
 python3 -m unittest discover -s tests -v
 ```
 
-No third-party runtime dependencies are required for P0.
+No third-party runtime dependencies are required for P0 or P1.
 
 ## Workspaces
 
