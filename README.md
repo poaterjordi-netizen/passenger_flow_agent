@@ -1,5 +1,10 @@
 # Metro Passenger Flow Agent
 
+[![CI](https://github.com/poaterjordi-netizen/passenger_flow_agent/actions/workflows/ci.yml/badge.svg)](https://github.com/poaterjordi-netizen/passenger_flow_agent/actions/workflows/ci.yml)
+[![Quality](https://github.com/poaterjordi-netizen/passenger_flow_agent/actions/workflows/quality.yml/badge.svg)](https://github.com/poaterjordi-netizen/passenger_flow_agent/actions/workflows/quality.yml)
+[![CodeQL](https://github.com/poaterjordi-netizen/passenger_flow_agent/actions/workflows/codeql.yml/badge.svg)](https://github.com/poaterjordi-netizen/passenger_flow_agent/actions/workflows/codeql.yml)
+[![Documentation Status](https://readthedocs.org/projects/passenger-flow-agent/badge/?version=latest)](https://passenger-flow-agent.readthedocs.io/en/latest/)
+
 Governed passenger-flow query agent for metro operations. The repository separates deterministic contracts and verification from any future language-model layer.
 
 ## P1 status
@@ -39,6 +44,17 @@ python3 -m unittest discover -s tests -v
 ```
 
 No third-party runtime dependencies are required for P0 or P1.
+
+## Engineering services
+
+- [Read the Docs](https://passenger-flow-agent.readthedocs.io/en/latest/) publishes the
+  versioned project documentation.
+- [GitHub Actions](https://github.com/poaterjordi-netizen/passenger_flow_agent/actions)
+  runs contract tests, Python 3.11-3.13 compatibility, linting, coverage, package builds,
+  documentation checks, and CodeQL analysis.
+- [GitHub Security](https://github.com/poaterjordi-netizen/passenger_flow_agent/security)
+  provides CodeQL, Dependabot alerts and updates, secret scanning, and push protection.
+- Local pre-commit hooks run YAML/JSON hygiene, private-key detection, and Ruff checks.
 
 ## Workspaces
 
