@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/metro/gold_case.schema.json",
+  "title": "Metro passenger-flow Gold Cases",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "cases"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["case_id", "question", "query_ir", "expected", "risk_tags"],
+        "properties": {
+          "case_id": {"type": "string", "pattern": "^GC-[0-9]{3}$"},
+          "question": {"type": "string", "minLength": 1},
+          "query_ir": {"$ref": "query_ir.schema.json"},
+          "expected": {
+            "type": "object",
+            "required": ["status"],
+            "properties": {
+              "status": {"enum": ["answer", "clarify", "reject"]},
+              "value": {},
+              "reason": {"type": "string"}
+            }
+          },
+          "risk_tags": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

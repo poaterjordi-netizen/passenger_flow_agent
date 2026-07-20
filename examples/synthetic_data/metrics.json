@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "timezone": "Asia/Shanghai",
+  "metrics": [
+    {"id": "entries", "source_fields": ["entries"], "aggregation": "sum", "unit": "passengers", "dimensions": ["line", "station", "direction", "time"]},
+    {"id": "exits", "source_fields": ["exits"], "aggregation": "sum", "unit": "passengers", "dimensions": ["line", "station", "direction", "time"]},
+    {"id": "transfers", "source_fields": ["transfers"], "aggregation": "sum", "unit": "passengers", "dimensions": ["line", "station", "time"]},
+    {"id": "net_inflow", "source_fields": ["entries", "exits"], "aggregation": "sum_difference", "unit": "passengers", "dimensions": ["line", "station", "direction", "time"]}
+  ]
+}

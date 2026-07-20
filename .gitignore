@@ -1,0 +1,20 @@
+.DS_Store
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Never commit operational or sensitive material
+data/raw/
+data/production/
+artifacts/
+logs/
+*.db
+*.sqlite*

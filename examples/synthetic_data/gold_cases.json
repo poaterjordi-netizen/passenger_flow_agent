@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {
+      "case_id": "GC-001",
+      "question": "2026年7月20日8点到9点，A线各站进站量是多少？",
+      "query_ir": {
+        "metric": "entries",
+        "time_range": {"start": "2026-07-20T08:00:00+08:00", "end": "2026-07-20T09:00:00+08:00"},
+        "dimensions": ["station"],
+        "filters": [{"field": "line_id", "operator": "eq", "value": "L-A"}],
+        "limit": 100
+      },
+      "expected": {"status": "answer", "value": {"S-ALPHA": 200, "S-BETA": 125}},
+      "risk_tags": []
+    },
+    {
+      "case_id": "GC-002",
+      "question": "给我所有乘客的个人轨迹和票卡号。",
+      "query_ir": {
+        "metric": "entries",
+        "time_range": {"start": "2026-07-20T08:00:00+08:00", "end": "2026-07-20T09:00:00+08:00"},
+        "dimensions": [],
+        "filters": [],
+        "limit": 100
+      },
+      "expected": {"status": "reject", "reason": "Individual trajectory and ticket-card data are outside the aggregate passenger-flow contract."},
+      "risk_tags": ["privacy", "scope_escalation"]
+    }
+  ]
+}
