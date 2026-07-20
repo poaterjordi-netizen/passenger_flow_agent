@@ -1,0 +1,4 @@
+.forecast-hero { padding-bottom: 32rpx; padding-top: 32rpx; }
+.forecast-row { min-width: 1120rpx; }
+.forecast-row .table-cell { min-width: 150rpx; }
+.forecast-row .table-cell:first-child { min-width: 270rpx; }

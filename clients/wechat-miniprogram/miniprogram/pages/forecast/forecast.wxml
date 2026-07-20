@@ -1,0 +1,55 @@
+<view class="page-shell">
+  <view class="hero forecast-hero">
+    <view class="hero-kicker">Baseline Forecast</view>
+    <view class="hero-title">指定日客流预览</view>
+    <view class="hero-subtitle">将参考日的站点客流模式复制到目标日期，不写回数据库。</view>
+  </view>
+
+  <view class="notice">该功能是可追溯的基线变换，不代表生产预测准确率。</view>
+  <view wx:if="{{error}}" class="error-card">{{error}}</view>
+  <view wx:if="{{loading}}" class="loading-state">正在加载可用日期…</view>
+
+  <view wx:else class="card form-card">
+    <view class="field">
+      <view class="field-label">参考日期</view>
+      <picker mode="date" value="{{referenceDate}}" bindchange="onReferenceDateChange">
+        <view class="field-value">{{referenceDate}} 〉</view>
+      </picker>
+    </view>
+    <view class="field">
+      <view class="field-label">目标日期</view>
+      <picker mode="date" value="{{targetDate}}" bindchange="onTargetDateChange">
+        <view class="field-value">{{targetDate}} 〉</view>
+      </picker>
+    </view>
+    <view class="field">
+      <view class="field-label">方案编号</view>
+      <input class="field-input" type="number" value="{{schemeId}}" bindinput="onSchemeInput" placeholder="请输入非负整数" />
+    </view>
+    <button class="primary-button" loading="{{submitting}}" disabled="{{submitting}}" bindtap="submitForecast">
+      {{submitting ? '正在生成' : '生成预测预览'}}
+    </button>
+  </view>
+
+  <view wx:if="{{columns.length}}" class="section">
+    <view class="section-heading">
+      <view class="section-title">预测明细</view>
+      <view class="section-note">{{rowCount}} 条 · 仅预览</view>
+    </view>
+    <scroll-view scroll-x class="result-table">
+      <view class="table-row header forecast-row">
+        <view class="table-cell" wx:for="{{columns}}" wx:key="id">{{item.label}}</view>
+      </view>
+      <view class="table-row forecast-row" wx:for="{{resultRows}}" wx:key="id" wx:for-item="row">
+        <view class="table-cell" wx:for="{{row.cells}}" wx:key="*this">{{item}}</view>
+      </view>
+    </scroll-view>
+    <view wx:if="{{audit}}" class="audit-strip" bindtap="openAudit">
+      <view>
+        <view class="section-note">审计编号</view>
+        <view class="audit-id">{{audit.audit_id}}</view>
+      </view>
+      <view class="text-button">查看 →</view>
+    </view>
+  </view>
+</view>

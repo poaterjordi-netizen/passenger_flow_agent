@@ -18,6 +18,8 @@ language-model interpretation separate from deterministic validation and executi
 - [Architecture](architecture.md)
 - [Deterministic query loop](p1_deterministic_loop.md)
 - [Read-only database and designated-day forecast](database_and_forecast.md)
+- [WeChat Mini Program and synthetic API](mobile_miniprogram.md)
+- [Open-source frontend and backend reuse assessment](open_source_reuse_assessment.md)
 - [Data contract](data_contract.md)
 - [Metric dictionary](metric_dictionary.md)
 - [Threat model](threat_model.md)

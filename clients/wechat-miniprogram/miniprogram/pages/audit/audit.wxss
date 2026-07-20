@@ -1,0 +1,37 @@
+.audit-hero {
+  align-items: center;
+  background: #103c3b;
+  border-radius: 30rpx;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  padding: 44rpx 28rpx;
+}
+
+.audit-check {
+  align-items: center;
+  background: #43aa82;
+  border: 8rpx solid rgba(255, 255, 255, 0.16);
+  border-radius: 50%;
+  display: flex;
+  font-size: 42rpx;
+  font-weight: 900;
+  height: 76rpx;
+  justify-content: center;
+  width: 76rpx;
+}
+
+.audit-status { font-size: 34rpx; font-weight: 800; margin-top: 22rpx; }
+.audit-operation { color: #a9d8d0; font-size: 23rpx; margin-top: 6rpx; }
+.detail-card { margin-top: 24rpx; }
+
+.detail-row {
+  border-bottom: 1rpx solid #e9eeec;
+  padding: 22rpx 0;
+}
+
+.detail-row:last-child { border-bottom: 0; }
+.detail-label { color: #788986; font-size: 22rpx; }
+.detail-value { color: #244946; font-size: 25rpx; line-height: 1.55; margin-top: 8rpx; word-break: break-all; }
+.copy-value { color: #0f6b63; text-decoration: underline; }
+.fingerprint { color: #5b716e; font-size: 20rpx; }

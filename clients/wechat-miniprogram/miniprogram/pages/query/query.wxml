@@ -1,0 +1,113 @@
+<view class="page-shell">
+  <view class="hero query-hero">
+    <view class="hero-kicker">Governed Query</view>
+    <view class="hero-title">结构化客流查询</view>
+    <view class="hero-subtitle">每个字段均通过白名单校验，不接收自然语言 SQL。</view>
+  </view>
+
+  <view wx:if="{{loading}}" class="loading-state">正在加载指标目录…</view>
+  <view wx:if="{{error}}" class="error-card">{{error}}</view>
+
+  <view wx:if="{{catalog}}" class="card form-card">
+    <view class="field">
+      <view class="field-label">查询指标</view>
+      <picker range="{{metricLabels}}" value="{{metricIndex}}" bindchange="onMetricChange">
+        <view class="field-value">{{metricLabels[metricIndex]}} 〉</view>
+      </picker>
+    </view>
+
+    <view class="field">
+      <view class="field-label">分组维度（可多选）</view>
+      <checkbox-group class="check-grid" bindchange="onDimensionsChange">
+        <label class="check-item" wx:for="{{allowedDimensions}}" wx:key="id">
+          <checkbox value="{{item.id}}" checked="{{item.checked}}" color="#0f6b63" />{{item.label}}
+        </label>
+      </checkbox-group>
+    </view>
+
+    <view class="inline-fields">
+      <view class="field">
+        <view class="field-label">开始日期</view>
+        <picker mode="date" value="{{startDate}}" bindchange="onStartDateChange">
+          <view class="field-value">{{startDate}}</view>
+        </picker>
+      </view>
+      <view class="field">
+        <view class="field-label">开始时间</view>
+        <picker mode="time" value="{{startTime}}" bindchange="onStartTimeChange">
+          <view class="field-value">{{startTime}}</view>
+        </picker>
+      </view>
+    </view>
+
+    <view class="inline-fields">
+      <view class="field">
+        <view class="field-label">结束日期</view>
+        <picker mode="date" value="{{endDate}}" bindchange="onEndDateChange">
+          <view class="field-value">{{endDate}}</view>
+        </picker>
+      </view>
+      <view class="field">
+        <view class="field-label">结束时间</view>
+        <picker mode="time" value="{{endTime}}" bindchange="onEndTimeChange">
+          <view class="field-value">{{endTime}}</view>
+        </picker>
+      </view>
+    </view>
+
+    <view class="field">
+      <view class="field-label">线路筛选</view>
+      <picker range="{{lineOptions}}" value="{{lineIndex}}" bindchange="onLineChange">
+        <view class="field-value">{{lineOptions[lineIndex]}} 〉</view>
+      </picker>
+    </view>
+    <view class="field">
+      <view class="field-label">车站筛选</view>
+      <picker range="{{stationOptions}}" value="{{stationIndex}}" bindchange="onStationChange">
+        <view class="field-value">{{stationOptions[stationIndex]}} 〉</view>
+      </picker>
+    </view>
+    <view class="field">
+      <view class="field-label">方向筛选</view>
+      <picker range="{{directionOptions}}" range-key="label" value="{{directionIndex}}" bindchange="onDirectionChange">
+        <view class="field-value">{{directionOptions[directionIndex].label}} 〉</view>
+      </picker>
+    </view>
+    <button class="primary-button" loading="{{submitting}}" disabled="{{submitting}}" bindtap="submitQuery">
+      {{submitting ? '正在执行' : '执行查询'}}
+    </button>
+  </view>
+
+  <view wx:if="{{columns.length}}" class="section">
+    <view class="section-heading">
+      <view class="section-title">查询结果</view>
+      <view class="section-note">{{rowCount}} 条</view>
+    </view>
+
+    <view wx:if="{{bars.length}}" class="card chart-card">
+      <view class="bar-row" wx:for="{{bars}}" wx:key="id">
+        <view class="bar-meta"><text>{{item.label}}</text><text>{{item.value}}</text></view>
+        <view class="bar-track"><view class="bar-fill" style="width: {{item.width}}%;"></view></view>
+      </view>
+    </view>
+
+    <view wx:if="{{!resultRows.length}}" class="card empty-state">当前筛选条件下没有数据</view>
+
+    <scroll-view wx:else scroll-x class="result-table">
+      <view class="table-row header">
+        <view class="table-cell" wx:for="{{columns}}" wx:key="id">{{item.label}}</view>
+      </view>
+      <view class="table-row" wx:for="{{resultRows}}" wx:key="id" wx:for-item="row">
+        <view class="table-cell" wx:for="{{row.cells}}" wx:key="*this">{{item}}</view>
+      </view>
+    </scroll-view>
+
+    <view wx:if="{{audit}}" class="audit-strip" bindtap="openAudit">
+      <view>
+        <view class="section-note">审计编号</view>
+        <view class="audit-id">{{audit.audit_id}}</view>
+      </view>
+      <view class="text-button">查看 →</view>
+    </view>
+  </view>
+</view>

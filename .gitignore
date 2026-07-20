@@ -13,6 +13,10 @@ build/
 dist/
 *.egg-info/
 
+# Developer-specific WeChat DevTools settings and generated packages
+clients/wechat-miniprogram/project.private.config.json
+clients/wechat-miniprogram/*.wxapkg
+
 # Never commit operational or sensitive material
 data/raw/
 data/production/

@@ -19,6 +19,8 @@ nav:
   - Architecture: architecture.md
   - Deterministic query loop: p1_deterministic_loop.md
   - Database and designated-day forecast: database_and_forecast.md
+  - WeChat Mini Program: mobile_miniprogram.md
+  - Open-source reuse assessment: open_source_reuse_assessment.md
   - Data contract: data_contract.md
   - Metric dictionary: metric_dictionary.md
   - Threat model: threat_model.md

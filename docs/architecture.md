@@ -23,7 +23,9 @@ question
 - `query_engine.py`: compiles allowlisted QueryIR to parameterized SQL, loads the synthetic SQLite store, executes deterministic aggregates, verifies Gold Cases, and writes audit artifacts.
 - `database.py`: injects runtime-only MySQL settings, compiles fixed station/OD queries, requires TLS and read-only transactions, enforces limits, and writes redacted audits.
 - `forecasting.py`: contains the reusable, database-write-free designated-day station-flow transformation ported from the active legacy path.
+- `api/`: exposes synthetic catalog, constrained QueryIR execution, baseline forecast preview, and sanitized audit summaries over HTTP.
 - `cli.py`: exposes synthetic validation/evaluation, bounded database queries, metadata inspection, and designated-day forecast commands.
+- `clients/wechat-miniprogram/`: isolated native mobile client; it has no database or arbitrary-SQL surface.
 - `schemas/`: machine-readable contracts for QueryIR and Gold Cases.
 - `examples/synthetic_data/`: non-sensitive baseline fixtures.
 - `tests/`: contract and repository-boundary checks.
@@ -42,6 +44,7 @@ question
 - P0: contracts and synthetic fixtures — complete.
 - P1: deterministic QueryIR-to-result loop on synthetic data — complete.
 - P1.5: bounded MySQL adapter and designated-day baseline forecast — implemented; real-data use remains explicitly authorized and local-artifact only.
+- Mobile P1: synthetic-only HTTP API and WeChat Mini Program experience client — implemented; staging deployment and publication remain human-gated.
 - P2: bounded natural-language-to-QueryIR layer and adversarial evaluation.
 - P3: dedicated least-privilege database identity, verified server CA, sanitized real-data Gold Cases, and cost/timeout evaluation.
 - P4: private collaboration, CI hardening, and internal integration.

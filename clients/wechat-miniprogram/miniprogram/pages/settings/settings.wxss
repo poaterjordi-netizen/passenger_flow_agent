@@ -1,0 +1,36 @@
+.settings-hero { padding-bottom: 32rpx; padding-top: 32rpx; }
+
+.health-card {
+  align-items: center;
+  background: #eaf6f1;
+  border: 1rpx solid #badfd2;
+  border-radius: 22rpx;
+  display: flex;
+  margin-top: 22rpx;
+  padding: 24rpx;
+}
+
+.health-dot {
+  background: #26a276;
+  border-radius: 50%;
+  box-shadow: 0 0 0 10rpx rgba(38, 162, 118, 0.12);
+  height: 20rpx;
+  margin: 0 30rpx 0 10rpx;
+  width: 20rpx;
+}
+
+.health-title { color: #176044; font-size: 26rpx; font-weight: 750; }
+.health-note { color: #61867a; font-size: 21rpx; margin-top: 5rpx; }
+
+.token-row { align-items: center; display: flex; }
+.token-row .field-input { flex: 1; }
+.token-toggle { margin-left: 18rpx; }
+.notice-title { font-size: 25rpx; font-weight: 800; margin-bottom: 8rpx; }
+
+.reset-link {
+  color: #7c8f8b;
+  font-size: 23rpx;
+  margin-top: 34rpx;
+  text-align: center;
+  text-decoration: underline;
+}

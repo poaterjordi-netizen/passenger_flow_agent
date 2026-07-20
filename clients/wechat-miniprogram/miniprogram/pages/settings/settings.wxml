@@ -1,0 +1,41 @@
+<view class="page-shell">
+  <view class="hero settings-hero">
+    <view class="hero-kicker">Environment</view>
+    <view class="hero-title">连接测试环境</view>
+    <view class="hero-subtitle">手机真机预览时，请填写手机能够访问的 HTTPS 测试地址。</view>
+  </view>
+
+  <view wx:if="{{error}}" class="error-card">{{error}}</view>
+  <view wx:if="{{health}}" class="health-card">
+    <view class="health-dot"></view>
+    <view>
+      <view class="health-title">服务连接正常</view>
+      <view class="health-note">{{health.environment}} · {{health.data_scope}} · v{{health.version}}</view>
+    </view>
+  </view>
+
+  <view class="card form-card">
+    <view class="field">
+      <view class="field-label">API 基础地址</view>
+      <input class="field-input mono" value="{{apiBaseUrl}}" bindinput="onBaseUrlInput" placeholder="https://staging.example.com" />
+    </view>
+    <view class="field token-field">
+      <view class="field-label">测试访问令牌（可选）</view>
+      <view class="token-row">
+        <input class="field-input mono" password="{{!showToken}}" value="{{accessToken}}" bindinput="onTokenInput" placeholder="由测试服务器管理员提供" />
+        <view class="text-button token-toggle" bindtap="toggleToken">{{showToken ? '隐藏' : '显示'}}</view>
+      </view>
+    </view>
+    <button class="primary-button" loading="{{testing}}" disabled="{{testing}}" bindtap="testConnection">测试并保存</button>
+    <button class="secondary-button" bindtap="save">仅保存设置</button>
+  </view>
+
+  <view class="notice">
+    <view class="notice-title">安全边界</view>
+    <view>• 小程序只调用受控 API，不连接数据库。</view>
+    <view>• 不要在这里填写 AppSecret 或数据库密码。</view>
+    <view>• 当前版本只允许合成数据体验。</view>
+  </view>
+
+  <view class="reset-link" bindtap="clear">恢复本地默认地址</view>
+</view>

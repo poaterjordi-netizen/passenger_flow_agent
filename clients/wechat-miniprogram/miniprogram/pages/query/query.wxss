@@ -1,0 +1,26 @@
+.query-hero { padding-bottom: 32rpx; padding-top: 32rpx; }
+
+.chart-card { padding-bottom: 18rpx; padding-top: 18rpx; }
+
+.bar-row { margin: 18rpx 0; }
+
+.bar-meta {
+  color: #466661;
+  display: flex;
+  font-size: 22rpx;
+  justify-content: space-between;
+  margin-bottom: 9rpx;
+}
+
+.bar-track {
+  background: #e5eeeb;
+  border-radius: 99rpx;
+  height: 14rpx;
+  overflow: hidden;
+}
+
+.bar-fill {
+  background: linear-gradient(90deg, #0f6b63, #40a092);
+  border-radius: 99rpx;
+  height: 100%;
+}

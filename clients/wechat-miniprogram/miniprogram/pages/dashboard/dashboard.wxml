@@ -1,0 +1,65 @@
+<view class="page-shell">
+  <view class="hero">
+    <view class="hero-kicker">Metro Operations</view>
+    <view class="hero-title">客流态势，一屏掌握</view>
+    <view class="hero-subtitle">确定性指标计算 · 受控查询 · 全链路审计</view>
+    <view class="scope-badge">● 合成数据体验环境</view>
+  </view>
+
+  <view wx:if="{{error}}" class="error-card">
+    <view>{{error}}</view>
+    <view class="text-button error-action" bindtap="openSettings">检查 API 设置 →</view>
+  </view>
+
+  <view wx:if="{{loading}}" class="loading-state">正在加载客流指标…</view>
+
+  <block wx:elif="{{!error}}">
+    <view class="section">
+      <view class="section-heading">
+        <view class="section-title">核心指标</view>
+        <view class="section-note">{{rangeText}}</view>
+      </view>
+      <view class="metric-grid">
+        <view class="metric-card metric-{{item.id}}" wx:for="{{cards}}" wx:key="id">
+          <view class="metric-label">{{item.label}}</view>
+          <view class="metric-value">{{item.value}}</view>
+          <view class="metric-unit">{{item.unit}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="section-heading">
+        <view class="section-title">进站客流排行</view>
+        <view class="text-button" bindtap="openQuery">详细查询 →</view>
+      </view>
+      <view class="card ranking-card">
+        <view class="ranking-row" wx:for="{{topStations}}" wx:key="station">
+          <view class="rank rank-{{item.rank}}">{{item.rank}}</view>
+          <view class="station-name">{{item.station}}</view>
+          <view class="station-value">{{item.value}} <text>人次</text></view>
+        </view>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="section-title">快捷操作</view>
+      <view class="quick-grid">
+        <view class="quick-card" bindtap="openQuery">
+          <view class="quick-mark">Q</view>
+          <view>
+            <view class="quick-title">结构化查询</view>
+            <view class="quick-note">按线路、车站和方向筛选</view>
+          </view>
+        </view>
+        <view class="quick-card" bindtap="openForecast">
+          <view class="quick-mark forecast-mark">F</view>
+          <view>
+            <view class="quick-title">指定日预测</view>
+            <view class="quick-note">复制参考日客流模式</view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </block>
+</view>

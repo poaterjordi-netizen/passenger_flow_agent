@@ -49,6 +49,26 @@ python3 -m unittest discover -s tests -v
 
 Read-only database and forecast usage is documented in [`docs/database_and_forecast.md`](docs/database_and_forecast.md). Credentials are injected at runtime and never committed.
 
+## WeChat Mini Program first version
+
+The repository now includes a native WeChat Mini Program under
+`clients/wechat-miniprogram/` and a synthetic-only FastAPI service under
+`src/metro_agent/api/`. The mobile client provides a dashboard, constrained
+QueryIR form, result charts and tables, designated-day baseline preview, audit
+summary, and runtime connection settings. It never connects directly to MySQL.
+
+Start the local API from the repository root:
+
+```bash
+python3 -m pip install -e .
+metro-agent-api
+```
+
+Open `http://127.0.0.1:8000/docs` for the generated API contract. Import
+`clients/wechat-miniprogram/` into WeChat DevTools and use the Settings tab to
+select the local or HTTPS staging API. Full setup and phone-testing instructions
+are in [`docs/mobile_miniprogram.md`](docs/mobile_miniprogram.md).
+
 ## Engineering services
 
 - [Read the Docs](https://passenger-flow-agent.readthedocs.io/en/latest/) publishes the

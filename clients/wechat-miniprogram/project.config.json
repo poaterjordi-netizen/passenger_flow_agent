@@ -1,0 +1,17 @@
+{
+  "appid": "touristappid",
+  "compileType": "miniprogram",
+  "description": "Governed metro passenger-flow synthetic-data client",
+  "libVersion": "latest",
+  "miniprogramRoot": "miniprogram/",
+  "projectname": "metro-passenger-flow-agent",
+  "setting": {
+    "coverView": true,
+    "es6": true,
+    "minified": true,
+    "postcss": true,
+    "urlCheck": true
+  },
+  "simulatorType": "wechat",
+  "condition": {}
+}

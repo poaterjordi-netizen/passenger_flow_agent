@@ -1,0 +1,37 @@
+<view class="page-shell">
+  <view wx:if="{{loading}}" class="loading-state">正在核对审计记录…</view>
+  <view wx:if="{{error}}" class="error-card">{{error}}</view>
+
+  <view wx:if="{{audit}}">
+    <view class="audit-hero">
+      <view class="audit-check">✓</view>
+      <view class="audit-status">执行成功</view>
+      <view class="audit-operation">{{operationLabel}}</view>
+    </view>
+
+    <view class="card detail-card">
+      <view class="detail-row">
+        <view class="detail-label">审计编号</view>
+        <view class="detail-value mono copy-value" bindtap="copyAuditId">{{audit.audit_id}}</view>
+      </view>
+      <view class="detail-row">
+        <view class="detail-label">创建时间</view>
+        <view class="detail-value">{{audit.created_at}}</view>
+      </view>
+      <view class="detail-row">
+        <view class="detail-label">返回行数</view>
+        <view class="detail-value">{{audit.row_count}}</view>
+      </view>
+      <view class="detail-row">
+        <view class="detail-label">数据来源</view>
+        <view class="detail-value">{{audit.data_source}}</view>
+      </view>
+      <view class="detail-row fingerprint-row">
+        <view class="detail-label">请求指纹</view>
+        <view class="detail-value mono fingerprint">{{audit.query_fingerprint}}</view>
+      </view>
+    </view>
+
+    <view class="notice">移动端只显示脱敏摘要；完整的合成数据审计记录保存在服务端。</view>
+  </view>
+</view>
