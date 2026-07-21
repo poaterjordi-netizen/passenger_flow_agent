@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/metro/data_source_registry.schema.json",
+  "title": "External governed passenger-flow source registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "sources"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "logical_dataset",
+          "city",
+          "dataset_role",
+          "source_version",
+          "physical_mapping_ref",
+          "physical_mapping_version",
+          "physical_mapping_hash",
+          "time_grain",
+          "timezone",
+          "status",
+          "quality_status",
+          "semantic_status",
+          "quality_gate",
+          "access_policy",
+          "default_time_range"
+        ],
+        "properties": {
+          "logical_dataset": {"type": "string", "minLength": 1},
+          "city": {"type": "string", "minLength": 1},
+          "dataset_role": {"const": "actual"},
+          "source_version": {"type": "string", "minLength": 1},
+          "physical_mapping_ref": {"enum": ["station_flow_day"]},
+          "physical_mapping_version": {"type": "string", "minLength": 1},
+          "physical_mapping_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "time_grain": {"enum": ["10m", "15m", "30m", "hour", "day"]},
+          "timezone": {"const": "Asia/Shanghai"},
+          "status": {"enum": ["candidate", "approved", "blocked"]},
+          "quality_status": {"enum": ["pass", "warning", "blocked", "unknown"]},
+          "semantic_status": {"enum": ["verified", "unverified"]},
+          "quality_gate": {"type": "string", "minLength": 1},
+          "access_policy": {"type": "string", "minLength": 1},
+          "default_time_range": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["start", "end"],
+            "properties": {
+              "start": {"type": "string", "format": "date-time"},
+              "end": {"type": "string", "format": "date-time"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

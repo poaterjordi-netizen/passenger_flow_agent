@@ -7,6 +7,27 @@
   "required": ["metric", "time_range", "dimensions", "filters", "limit"],
   "properties": {
     "metric": {"type": "string", "minLength": 1},
+    "metric_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "city": {"type": ["string", "null"], "minLength": 1},
+    "dataset_role": {"enum": ["actual", "reference", "forecast"]},
+    "source_version": {"type": ["string", "null"], "minLength": 1},
+    "time_grain": {"enum": ["source", "10m", "15m", "30m", "hour", "day"]},
+    "time_basis": {"enum": ["event_time", "service_day"]},
+    "timezone": {"const": "Asia/Shanghai"},
+    "service_day": {"type": ["string", "null"], "format": "date"},
+    "calendar_version": {"type": ["string", "null"], "minLength": 1},
+    "cross_midnight_policy": {"enum": ["reject", "service_day_calendar"]},
+    "data_as_of": {"type": ["string", "null"], "format": "date-time"},
+    "comparison_periods": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["baseline", "comparison", "relation"],
+      "properties": {
+        "baseline": {"$ref": "#/$defs/timeRange"},
+        "comparison": {"$ref": "#/$defs/timeRange"},
+        "relation": {"enum": ["explicit", "previous_period", "year_over_year"]}
+      }
+    },
     "time_range": {
       "type": "object",
       "additionalProperties": false,
@@ -44,6 +65,30 @@
         }
       }
     },
+    "order_by": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field", "direction"],
+        "properties": {
+          "field": {"type": "string", "minLength": 1},
+          "direction": {"enum": ["asc", "desc"]}
+        }
+      }
+    },
     "limit": {"type": "integer", "minimum": 1, "maximum": 1000}
+  },
+  "$defs": {
+    "timeRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": {"type": "string", "format": "date-time"},
+        "end": {"type": "string", "format": "date-time"}
+      }
+    }
   }
 }

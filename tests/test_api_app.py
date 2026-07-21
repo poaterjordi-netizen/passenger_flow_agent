@@ -45,6 +45,7 @@ class ApiApplicationTests(unittest.TestCase):
         self.assertIn("/api/v1/forecasts/designated-day", schema["paths"])
         self.assertIn("/api/v1/assistant/sessions", schema["paths"])
         self.assertIn("/api/v1/assistant/capabilities", schema["paths"])
+        self.assertIn("/api/v1/governance/status", schema["paths"])
         self.assertIn("/api/v1/assistant/sessions/{session_id}/messages", schema["paths"])
         self.assertIn("/api/v1/assistant/runs/{run_id}", schema["paths"])
         self.assertIn("/api/v1/assistant/runs/{run_id}/events", schema["paths"])
@@ -65,6 +66,24 @@ class ApiApplicationTests(unittest.TestCase):
         self.assertEqual(capabilities["active_runtime"]["invocation_status"], "not_applicable")
         self.assertEqual(capabilities["validated_milestones"][0]["evidence"], "100/100")
         self.assertEqual(capabilities["validated_milestones"][1]["evidence"], "3/3")
+
+        governance = self.endpoint("/api/v1/governance/status", "GET")(
+            service=self.app.state.service,
+            assistant=self.app.state.assistant,
+        )
+        self.assertTrue(governance["assistant_enabled"])
+        self.assertEqual(governance["assistant_status"], "synthetic_baseline")
+        self.assertEqual(governance["identity"]["subject_id"], "local-synthetic-user")
+        self.assertEqual(governance["access_scope"]["row_limit"], 1000)
+        self.assertEqual(governance["data_source"]["source_version"], "synthetic-v1")
+        self.assertEqual(governance["model_policy"]["data_egress"], "synthetic-only")
+        self.assertTrue(governance["model_policy"]["evidence_egress_allowed"])
+        self.assertEqual(
+            governance["tool_registry"]["tool_count"],
+            len(governance["tool_registry"]["registered_tools"]),
+        )
+        self.assertFalse(governance["promotion"]["ready"])
+        self.assertFalse(governance["promotion"]["enforced"])
 
     def test_route_functions_delegate_to_synthetic_service(self) -> None:
         service = self.app.state.service
@@ -118,7 +137,7 @@ class ApiApplicationTests(unittest.TestCase):
         )
         self.assertEqual(run["status"], "completed")
         self.assertTrue(run["verification"]["valid"])
-        self.assertEqual(run["model_runtime"]["provider_calls"], 3)
+        self.assertEqual(run["model_runtime"]["provider_calls"], 0)
         self.assertEqual(run["model_runtime"]["model_calls"], 0)
         self.assertEqual(run["model_runtime"]["usage_reporting"], "not_applicable")
         self.assertIsNone(run["model_runtime"]["model"])
@@ -146,7 +165,7 @@ class ApiApplicationTests(unittest.TestCase):
         request = SimpleNamespace(
             app=SimpleNamespace(state=SimpleNamespace(settings=self.settings))
         )
-        self.assertIsNone(_authorize(request, None))
+        self.assertEqual(_authorize(request, None).subject_id, "local-synthetic-user")
 
         protected = SimpleNamespace(
             app=SimpleNamespace(
@@ -160,11 +179,12 @@ class ApiApplicationTests(unittest.TestCase):
                 )
             )
         )
-        self.assertIsNone(
+        self.assertEqual(
             _authorize(
                 protected,
                 HTTPAuthorizationCredentials(scheme="Bearer", credentials="expected"),
-            )
+            ).subject_id,
+            "local-synthetic-user",
         )
         with self.assertRaises(HTTPException) as raised:
             _authorize(protected, None)

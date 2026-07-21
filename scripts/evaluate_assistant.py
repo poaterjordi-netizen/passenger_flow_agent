@@ -61,6 +61,7 @@ def evaluate(cases_path: Path) -> dict:
             ]
             parameter_ok = _parameter_matches(case.get("expected_parameter"), run.get("plan"))
             limitations = " ".join(response.get("limitations", []))
+            clarification_expected = case["expected_status"] == "needs_clarification"
             checks = {
                 "status": run["status"] == case["expected_status"],
                 "task_type": run["intent"]["task_type"] == case["expected_task_type"],
@@ -69,8 +70,16 @@ def evaluate(cases_path: Path) -> dict:
                     item["status"] == "success" for item in run["tool_results"]
                 ),
                 "states": set(case["required_states"]).issubset(states),
-                "verification": verification.get("valid") is True,
-                "evidence": bool(response.get("evidence_refs")),
+                "verification": (
+                    run.get("verification") is None
+                    if clarification_expected
+                    else verification.get("valid") is True
+                ),
+                "evidence": (
+                    not response.get("evidence_refs")
+                    if clarification_expected
+                    else bool(response.get("evidence_refs"))
+                ),
                 "evidence_kinds": set(case["expected_evidence_kinds"]).issubset(evidence_kinds),
                 "parameter": parameter_ok,
                 "artifact": (

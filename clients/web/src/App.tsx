@@ -30,6 +30,7 @@ import {
   getAssistantCapabilities,
   getAudit,
   getCatalog,
+  getGovernanceStatus,
   getHealth,
   runForecast,
   runQuery,
@@ -39,6 +40,7 @@ import type {
   AssistantCapabilities,
   AuditSummary,
   CatalogResponse,
+  GovernanceStatus,
   QueryRequest,
   QueryResponse,
   RunRecord,
@@ -144,6 +146,11 @@ function displayTime(value: string) {
   }).format(new Date(value))
 }
 
+function compactHash(value: unknown) {
+  const text = typeof value === "string" ? value : ""
+  return text ? `${text.slice(0, 12)}…` : "—"
+}
+
 function ApiError({ error }: { error: unknown }) {
   return (
     <div
@@ -196,54 +203,88 @@ function buildQuery(
   catalog: CatalogResponse,
   metric: string,
   dimensions: QueryRequest["dimensions"] = [],
+  limit = 100,
 ): QueryRequest {
+  const metricDefinition = catalog.metrics.find((item) => item.id === metric)
   return {
     metric,
+    metric_version: metricDefinition?.version,
+    city: catalog.city,
+    dataset_role: metricDefinition?.dataset_role ?? "actual",
+    source_version: catalog.source_version,
     time_range: catalog.default_time_range,
     dimensions,
     filters: [],
-    limit: 100,
+    limit,
   }
 }
 
 function Dashboard() {
   const catalog = useQuery({ queryKey: ["catalog"], queryFn: getCatalog })
+  const governance = useQuery({
+    queryKey: ["governance-status"],
+    queryFn: getGovernanceStatus,
+    staleTime: 30_000,
+  })
   const health = useQuery({
     queryKey: ["health"],
     queryFn: getHealth,
     refetchInterval: 60_000,
   })
   const overview = useQuery({
-    queryKey: ["dashboard", catalog.data?.default_time_range],
-    enabled: Boolean(catalog.data),
+    queryKey: [
+      "dashboard",
+      catalog.data?.default_time_range,
+      governance.data?.access_scope.access_scope_hash,
+    ],
+    enabled: Boolean(catalog.data && governance.data),
     queryFn: async () => {
       const source = catalog.data
-      if (!source) throw new Error("Catalog is not ready")
-      const [entries, exits, transfers, net, station, trend] =
-        await Promise.all([
-          runQuery(buildQuery(source, "entries")),
-          runQuery(buildQuery(source, "exits")),
-          runQuery(buildQuery(source, "transfers")),
-          runQuery(buildQuery(source, "net_inflow")),
-          runQuery(buildQuery(source, "entries", ["station"])),
-          runQuery(buildQuery(source, "entries", ["time"])),
-        ])
-      return { entries, exits, transfers, net, station, trend }
+      const policy = governance.data
+      if (!source || !policy)
+        throw new Error("Catalog or governance status is not ready")
+      const rowLimit = Math.min(100, policy.access_scope.row_limit)
+      const registered = new Set(source.metrics.map((item) => item.id))
+      const metricIds = (
+        ["entries", "exits", "transfers", "net_inflow"] as const
+      ).filter((item) => registered.has(item))
+      const primaryMetric = registered.has("entries") ? "entries" : metricIds[0]
+      if (!primaryMetric) throw new Error("当前授权范围没有可展示的指标")
+      const [totals, station, trend] = await Promise.all([
+        Promise.all(
+          metricIds.map(
+            async (item) =>
+              [
+                item,
+                await runQuery(buildQuery(source, item, [], rowLimit)),
+              ] as const,
+          ),
+        ),
+        runQuery(buildQuery(source, primaryMetric, ["station"], rowLimit)),
+        runQuery(buildQuery(source, primaryMetric, ["time"], rowLimit)),
+      ])
+      return {
+        totals: Object.fromEntries(totals) as Partial<
+          Record<keyof typeof metricMeta, QueryResponse>
+        >,
+        primaryMetric,
+        station,
+        trend,
+      }
     },
   })
 
   if (catalog.isError) return <ApiError error={catalog.error} />
   const source = catalog.data
   const cards = overview.data
-    ? ([
-        ["entries", overview.data.entries.rows[0]?.entries],
-        ["exits", overview.data.exits.rows[0]?.exits],
-        ["transfers", overview.data.transfers.rows[0]?.transfers],
-        ["net_inflow", overview.data.net.rows[0]?.net_inflow],
-      ] as const)
+    ? (Object.keys(overview.data.totals) as Array<keyof typeof metricMeta>).map(
+        (key) => [key, overview.data?.totals[key]?.rows[0]?.[key]] as const,
+      )
     : []
   const stationRows = [...(overview.data?.station.rows ?? [])].sort(
-    (a, b) => Number(b.entries) - Number(a.entries),
+    (a, b) =>
+      Number(b[overview.data?.primaryMetric ?? "entries"]) -
+      Number(a[overview.data?.primaryMetric ?? "entries"]),
   )
   const trendRows = overview.data?.trend.rows ?? []
 
@@ -252,9 +293,12 @@ function Dashboard() {
       <PageHeading
         eyebrow="Operation intelligence"
         title="地铁客流运营总览"
-        description="将受约束 QueryIR 的确定性结果汇总为运营视图。当前仅展示合成数据，不连接生产数据库。"
+        description={`将受约束 QueryIR 的确定性结果汇总为运营视图。当前数据范围：${source?.data_scope ?? "检测中"}；页面只消费后端批准的指标和来源版本。`}
         action={
           <div className="flex items-center gap-2">
+            {source?.data_scope === "production-shadow" ? (
+              <Badge tone="amber">真实 MySQL · 本地 Shadow</Badge>
+            ) : null}
             <Badge tone={health.data?.status === "ok" ? "green" : "amber"}>
               <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
               API {health.data?.status === "ok" ? "运行正常" : "检测中"}
@@ -307,7 +351,7 @@ function Dashboard() {
             <div>
               <h2 className="font-semibold text-white">分时客流趋势</h2>
               <p className="mt-1 text-xs text-slate-500">
-                进站量 · 半开时间区间
+                {overview.data?.primaryMetric ?? "指标"} · 半开时间区间
               </p>
             </div>
             <Badge tone="cyan">ECharts</Badge>
@@ -316,9 +360,11 @@ function Dashboard() {
             {trendRows.length ? (
               <MetricChart
                 labels={trendRows.map((row) => displayTime(String(row.time)))}
-                values={trendRows.map((row) => Number(row.entries))}
+                values={trendRows.map((row) =>
+                  Number(row[overview.data?.primaryMetric ?? "entries"]),
+                )}
                 kind="line"
-                name="进站量"
+                name={overview.data?.primaryMetric ?? "entries"}
               />
             ) : (
               <EmptyState text="正在读取趋势数据" />
@@ -335,7 +381,8 @@ function Dashboard() {
           </CardHeader>
           <CardContent className="space-y-4">
             {stationRows.map((row, index) => {
-              const max = Number(stationRows[0]?.entries || 1)
+              const primaryMetric = overview.data?.primaryMetric ?? "entries"
+              const max = Number(stationRows[0]?.[primaryMetric] || 1)
               return (
                 <div key={String(row.station)}>
                   <div className="mb-2 flex items-center justify-between text-sm">
@@ -346,13 +393,15 @@ function Dashboard() {
                       {String(row.station)}
                     </span>
                     <strong className="text-slate-100">
-                      {formatNumber(row.entries)}
+                      {formatNumber(row[primaryMetric])}
                     </strong>
                   </div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-400"
-                      style={{ width: `${(Number(row.entries) / max) * 100}%` }}
+                      style={{
+                        width: `${(Number(row[primaryMetric]) / max) * 100}%`,
+                      }}
                     />
                   </div>
                 </div>
@@ -367,14 +416,14 @@ function Dashboard() {
           <StatusBlock
             icon={Database}
             label="数据范围"
-            value="Synthetic fixtures"
+            value={source?.data_scope ?? "—"}
             detail={`${source?.lines.length ?? 0} 条线路 · ${source?.stations.length ?? 0} 个站点`}
           />
           <StatusBlock
             icon={ShieldCheck}
             label="查询治理"
             value="QueryIR allowlist"
-            detail="固定指标 · 参数化查询 · 审计回读"
+            detail={`固定指标 · 行上限 ${governance.data?.access_scope.row_limit ?? "—"} · 审计回读`}
           />
           <StatusBlock
             icon={CalendarClock}
@@ -415,7 +464,279 @@ function StatusBlock({
   )
 }
 
+const assistantStatusLabels: Record<
+  GovernanceStatus["assistant_status"],
+  string
+> = {
+  synthetic_baseline: "合成基线可用",
+  disabled_by_runtime_flag: "生产 Assistant 开关未启用",
+  blocked_by_promotion_gate: "Promotion 门禁未通过",
+  enabled_for_local_shadow: "本地真实 Shadow 已显式授权（非生产晋级）",
+  enabled_after_promotion: "已通过 Promotion 并启用",
+}
+
+const promotionBlockerLabels: Record<string, string> = {
+  gate_status_not_approved: "门禁状态尚未批准",
+  owners_incomplete: "业务、数据、安全或工程 Owner 未齐",
+  thresholds_incomplete: "验收阈值未全部量化",
+  required_artifacts_incomplete: "必需签字或测试产物未齐",
+  promotion_gate_configuration_invalid: "门禁配置缺失或无效（已安全关闭）",
+}
+
+function GovernanceGateBanner({ status }: { status: GovernanceStatus }) {
+  const localLiveShadow = status.assistant_status === "enabled_for_local_shadow"
+  return (
+    <div
+      className={cn(
+        "rounded-xl border p-4",
+        status.assistant_enabled && !localLiveShadow
+          ? "border-emerald-400/15 bg-emerald-400/5"
+          : "border-amber-300/20 bg-amber-300/7",
+      )}
+      aria-live="polite"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <ShieldCheck className="h-4 w-4 text-emerald-300" />
+        <strong className="text-sm text-slate-100">
+          {assistantStatusLabels[status.assistant_status]}
+        </strong>
+        <Badge
+          tone={
+            status.assistant_enabled && !localLiveShadow ? "green" : "amber"
+          }
+        >
+          {status.assistant_enabled
+            ? localLiveShadow
+              ? "可提交本地 Shadow 任务"
+              : "可提交任务"
+            : "禁止提交任务"}
+        </Badge>
+        <Badge tone="slate">{status.data_scope}</Badge>
+        <Badge
+          tone={status.model_policy.evidence_egress_allowed ? "amber" : "green"}
+        >
+          证据出域：{status.model_policy.data_egress}
+        </Badge>
+        <Badge
+          tone={status.model_policy.intent_egress_allowed ? "amber" : "green"}
+        >
+          意图出域：{status.model_policy.intent_egress}
+        </Badge>
+        <Badge
+          tone={
+            status.model_policy.endpoint_binding_verified ? "green" : "slate"
+          }
+        >
+          端点绑定：
+          {status.model_policy.endpoint_binding_verified ? "已核验" : "未核验"}
+        </Badge>
+      </div>
+      <p className="mt-2 text-xs leading-5 text-slate-500">
+        身份 {status.identity.subject_id} · {status.identity.identity_adapter} ·
+        策略 {status.access_scope.policy_snapshot_id} · 行上限{" "}
+        {status.access_scope.row_limit} · 已注册工具{" "}
+        {status.tool_registry.tool_count} 个
+      </p>
+      {localLiveShadow ? (
+        <div className="mt-3 text-xs leading-5 text-amber-100/80">
+          当前会话会读取真实 MySQL 并调用真实模型，但来源语义和 Promotion
+          产物尚未完成；结果仅用于本地 shadow 验证，不可作为运营处置依据。
+        </div>
+      ) : null}
+      {!status.assistant_enabled && status.promotion.blockers.length ? (
+        <div className="mt-3 text-xs text-amber-100/75">
+          阻断原因：
+          {status.promotion.blockers
+            .map((item) => promotionBlockerLabels[item] ?? item)
+            .join("；")}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function GovernanceDetails({ status }: { status: GovernanceStatus }) {
+  const sourceHashes = [
+    [
+      "逻辑 registry",
+      status.data_source.logical_registry_version,
+      status.data_source.logical_registry_hash,
+    ],
+    [
+      "物理 mapping",
+      status.data_source.physical_mapping_version,
+      status.data_source.physical_mapping_hash,
+    ],
+  ] as const
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <h2 className="font-semibold text-white">实际生效的治理状态</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            来自后端运行时，不是前端写死的说明
+          </p>
+        </div>
+        <Badge tone={status.assistant_enabled ? "green" : "amber"}>
+          {assistantStatusLabels[status.assistant_status]}
+        </Badge>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <GovernanceGateBanner status={status} />
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <MiniStat
+            label="授权城市"
+            value={status.access_scope.allowed_cities.join("、")}
+          />
+          <MiniStat
+            label="授权数据角色"
+            value={status.access_scope.allowed_dataset_roles.join("、")}
+          />
+          <MiniStat
+            label="最长时间范围"
+            value={`${status.access_scope.max_time_range_hours} 小时`}
+          />
+          <MiniStat
+            label="导出策略"
+            value={status.access_scope.export_policy}
+          />
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-xl border border-white/7 bg-white/3 p-4">
+            <h3 className="text-sm font-semibold text-slate-200">
+              数据源与映射
+            </h3>
+            <div className="mt-3 space-y-2 text-xs text-slate-500">
+              <div>城市：{status.data_source.city ?? "—"}</div>
+              <div>源版本：{status.data_source.source_version ?? "—"}</div>
+              <div>注册状态：{status.data_source.registration_status}</div>
+              <div>
+                注册质量：{status.data_source.registration_quality_status} ·
+                运行质量：{status.data_source.runtime_quality_status}
+              </div>
+              <div>
+                新鲜度：{status.data_source.freshness_status} · 评估时间：
+                {status.data_source.quality_gate_evaluated_at
+                  ? new Date(
+                      status.data_source.quality_gate_evaluated_at,
+                    ).toLocaleString("zh-CN")
+                  : "未评估"}
+              </div>
+              {sourceHashes.map(([label, version, hash]) => (
+                <div key={label} className="font-mono">
+                  {label}：{version ?? "—"} · {compactHash(hash)}
+                </div>
+              ))}
+              <div className="font-mono">
+                access scope：
+                {compactHash(status.access_scope.access_scope_hash)}
+              </div>
+            </div>
+          </div>
+          <div className="rounded-xl border border-white/7 bg-white/3 p-4">
+            <h3 className="text-sm font-semibold text-slate-200">
+              Promotion 门禁
+            </h3>
+            <div className="mt-3 space-y-2 text-xs text-slate-500">
+              <div>Gate：{status.promotion.gate_id}</div>
+              <div>配置状态：{status.promotion.configured_status}</div>
+              <div>
+                环境开关：
+                {status.promotion.runtime_flag_requested ? "已请求" : "未请求"}{" "}
+                · 当前范围
+                {status.promotion.enforced ? "强制执行" : "不强制（合成数据）"}
+              </div>
+              <div>
+                本地真实 Shadow 确认：
+                {status.promotion.local_live_shadow_acknowledged
+                  ? "已显式确认（不等于生产晋级）"
+                  : "未确认"}
+              </div>
+              {status.promotion.blockers.map((item) => (
+                <div key={item} className="text-amber-200/75">
+                  • {promotionBlockerLabels[item] ?? item}
+                </div>
+              ))}
+              {status.promotion.missing_owner_roles.length ? (
+                <div>
+                  缺少 Owner：{status.promotion.missing_owner_roles.join("、")}
+                </div>
+              ) : null}
+              {status.promotion.missing_thresholds.length ? (
+                <div>
+                  缺少阈值：{status.promotion.missing_thresholds.join("、")}
+                </div>
+              ) : null}
+              {status.promotion.pending_artifacts.length ? (
+                <div>
+                  待批准产物：{status.promotion.pending_artifacts.join("、")}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-xl border border-white/7 bg-white/3 p-4">
+            <h3 className="text-sm font-semibold text-slate-200">身份边界</h3>
+            <div className="mt-3 space-y-2 text-xs text-slate-500">
+              <div>Adapter：{status.identity.identity_adapter}</div>
+              <div>Subject：{status.identity.subject_id}</div>
+              <div>部门 / Tenant：{status.identity.tenant_or_department}</div>
+              <div>角色：{status.identity.roles.join("、")}</div>
+              <div className="text-amber-200/75">
+                {status.identity.multi_user_isolation
+                  ? "已具备多用户强隔离"
+                  : "当前是单主体静态令牌适配器，不声称多用户 IdP 隔离"}
+              </div>
+            </div>
+          </div>
+          <div className="rounded-xl border border-white/7 bg-white/3 p-4">
+            <h3 className="text-sm font-semibold text-slate-200">
+              模型端点策略
+            </h3>
+            <div className="mt-3 space-y-2 text-xs text-slate-500">
+              <div>
+                Provider / Model：{status.model_policy.active_provider} /{" "}
+                {status.model_policy.active_model ?? "—"}
+              </div>
+              <div>证据策略：{status.model_policy.data_egress}</div>
+              <div>意图策略：{status.model_policy.intent_egress}</div>
+              <div>
+                端点绑定：
+                {status.model_policy.endpoint_binding_verified
+                  ? "provider + model + target hash 已精确匹配"
+                  : "未精确匹配，受保护数据不可出域"}
+              </div>
+              <div className="break-all font-mono">
+                target：{status.model_policy.endpoint_target_hash || "—"}
+              </div>
+              <div>策略：{status.model_policy.endpoint_policy_id}</div>
+            </div>
+          </div>
+        </div>
+        <details className="rounded-xl border border-white/7 bg-white/3 p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-slate-200">
+            查看实际注册工具（{status.tool_registry.tool_count}）
+          </summary>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {status.tool_registry.registered_tools.map((tool) => (
+              <Badge key={tool} tone="slate">
+                {tool}
+              </Badge>
+            ))}
+          </div>
+        </details>
+      </CardContent>
+    </Card>
+  )
+}
+
 function ResultsView({ result }: { result: QueryResponse }) {
+  const provenance = result.provenance ?? {}
+  const complete =
+    provenance.complete !== false && provenance.truncated !== true
+  const runtimeQuality = String(provenance.runtime_quality_status ?? "unknown")
+  const runtimeQualityPassed = runtimeQuality === "pass"
   const columns = result.rows.length ? Object.keys(result.rows[0]) : []
   const labels = result.rows.map((row, index) =>
     String(row[result.dimensions[0]] ?? index + 1),
@@ -427,9 +748,68 @@ function ResultsView({ result }: { result: QueryResponse }) {
         <Badge tone="green">查询成功</Badge>
         <Badge tone="slate">{result.row_count} 行</Badge>
         <Badge tone="cyan">{result.metric}</Badge>
+        <Badge tone={complete ? "green" : "amber"}>
+          {complete ? "结果完整" : "结果被截断"}
+        </Badge>
         <span className="ml-auto max-w-full truncate font-mono text-[11px] text-slate-600">
           {result.audit.audit_id}
         </span>
+      </div>
+      <div
+        className={cn(
+          "grid gap-3 rounded-xl border p-3 text-xs sm:grid-cols-2 xl:grid-cols-4",
+          complete
+            ? "border-emerald-400/12 bg-emerald-400/5"
+            : "border-amber-300/20 bg-amber-300/7",
+        )}
+      >
+        <MiniStat
+          label="返回 / 匹配"
+          value={`${String(provenance.returned_row_count ?? result.row_count)} / ${String(provenance.matched_row_count ?? "未知")}`}
+        />
+        <MiniStat
+          label="数据源版本"
+          value={String(provenance.source_version ?? "—")}
+        />
+        <MiniStat
+          label="策略快照"
+          value={String(provenance.policy_snapshot_id ?? "—")}
+        />
+        <MiniStat
+          label="Query fingerprint"
+          value={compactHash(provenance.query_fingerprint)}
+        />
+        <MiniStat
+          label="注册 / 运行质量"
+          value={`${String(provenance.registration_quality_status ?? "unknown")} / ${runtimeQuality}`}
+        />
+        <MiniStat
+          label="源行 / 缺失 / 非法"
+          value={`${String(provenance.source_row_count ?? "—")} / ${String(provenance.missing_row_count ?? "—")} / ${String(provenance.invalid_row_count ?? "—")}`}
+        />
+        <MiniStat
+          label="查询模板"
+          value={compactHash(provenance.query_template_hash)}
+        />
+        <MiniStat
+          label="连接与事务"
+          value={
+            provenance.transaction_mode
+              ? `${provenance.tls_identity_verified ? "TLS 身份已核验" : "TLS 未确认"} · ${String(provenance.tls_identity_mode ?? "unknown")} · ${String(provenance.transaction_mode)}`
+              : "合成基线 · 不适用"
+          }
+        />
+        {!runtimeQualityPassed && result.data_scope !== "synthetic" ? (
+          <p className="sm:col-span-2 xl:col-span-4 text-amber-100/80">
+            注册通过不代表本次数据通过；运行质量为 {runtimeQuality}
+            ，本结果不得用于运营决策。
+          </p>
+        ) : null}
+        {!complete ? (
+          <p className="sm:col-span-2 xl:col-span-4 text-amber-100/80">
+            当前只返回授权行上限内的部分结果，不能把本表表述为全局总量、完整排名或完整分布。
+          </p>
+        ) : null}
       </div>
       {result.rows.length > 1 ? (
         <MetricChart labels={labels} values={values} name={result.metric} />
@@ -463,14 +843,45 @@ function ResultsView({ result }: { result: QueryResponse }) {
 }
 
 const assistantExamples = [
+  "列出数据库中的所有地铁站",
+  "列出数据库中的所有地铁线路",
+  "有哪些指标",
+  "数据覆盖哪些日期",
+  "数据库基本情况",
   "查询各站进站客流并排序",
   "奥体中心有 4 万人演唱会，预测客流并给出建议",
-  "昨天客流为什么下降？",
-  "绘制工作日上午通勤热力图",
+  "我要从北京交通大学到北京工业大学，给出合理的出行规划",
+  "你能做什么？",
+  "什么是地铁断面客流？",
 ]
+
+function assistantExternalLinks(
+  tools: NonNullable<RunRecord["tool_results"]>,
+): Array<{ label: string; url: string }> {
+  const links = tools.flatMap((tool) => {
+    const summary = tool.summary ?? {}
+    const candidates = [summary.navigation_links, summary.source_refs]
+    return candidates.flatMap((candidate) => {
+      if (!Array.isArray(candidate)) return []
+      return candidate.flatMap((item) => {
+        if (!item || typeof item !== "object") return []
+        const record = item as Record<string, unknown>
+        const label = record.label
+        const url = record.url
+        return typeof label === "string" &&
+          typeof url === "string" &&
+          url.startsWith("https://")
+          ? [{ label, url }]
+          : []
+      })
+    })
+  })
+  return Array.from(new Map(links.map((link) => [link.url, link])).values())
+}
 
 function AssistantRunView({ run }: { run: RunRecord }) {
   const tools = run.tool_results ?? []
+  const externalLinks = assistantExternalLinks(tools)
   const events = run.events ?? []
   const planSteps = run.plan?.steps ?? []
   const evidenceGroups = run.evidence
@@ -482,6 +893,16 @@ function AssistantRunView({ run }: { run: RunRecord }) {
         ...(run.evidence.knowledge_sources ?? []),
       ]
     : []
+  const tableEntryLimit =
+    run.operation_ir?.answer_policy === "deterministic_table" ||
+    tools.some(
+      (tool) =>
+        tool.tool === "list_observed_entities" &&
+        tool.complete !== false &&
+        tool.truncated !== true,
+    )
+      ? 1000
+      : 20
   const tableEntries = tools
     .flatMap((tool) =>
       (tool.rows ?? []).map((row) => ({
@@ -489,7 +910,7 @@ function AssistantRunView({ run }: { run: RunRecord }) {
         row,
       })),
     )
-    .slice(0, 20)
+    .slice(0, tableEntryLimit)
   const tableRows = tableEntries.map((entry) => entry.row)
   const columns = tableRows[0] ? Object.keys(tableRows[0]).slice(0, 6) : []
   const numericColumn = columns.find((column) =>
@@ -498,6 +919,10 @@ function AssistantRunView({ run }: { run: RunRecord }) {
   const labelColumn = columns.find((column) => column !== numericColumn)
   const verificationPassed = run.verification?.valid === true
   const verificationFailed = run.verification?.valid === false
+  const egressCalls = run.model_egress ?? []
+  const approvedEgressCalls = egressCalls.filter(
+    (call) => call.decision === "approved",
+  ).length
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
@@ -505,11 +930,97 @@ function AssistantRunView({ run }: { run: RunRecord }) {
           {run.status}
         </Badge>
         <Badge tone="cyan">{run.intent?.task_type ?? "understand"}</Badge>
+        <Badge tone="cyan">
+          operation: {run.operation_ir?.operation ?? "未编译"}
+        </Badge>
+        <Badge tone="slate">
+          capability: {run.capability_match?.capability_id ?? "未匹配"}
+        </Badge>
+        <Badge
+          tone={
+            run.operation_ir?.answer_policy?.startsWith("llm_")
+              ? "cyan"
+              : "green"
+          }
+        >
+          {run.operation_ir?.answer_policy ?? "无回答策略"}
+        </Badge>
+        {run.failure_category ? (
+          <Badge tone="amber">failure: {run.failure_category}</Badge>
+        ) : null}
         <Badge tone="slate">{run.provider}</Badge>
+        <Badge tone="slate">intent: {run.intent_route}</Badge>
+        <Badge tone="slate">plan: {run.planner_route}</Badge>
         <span className="ml-auto font-mono text-[11px] text-slate-600">
           {run.run_id}
         </span>
       </div>
+      <div className="grid gap-3 rounded-xl border border-white/8 bg-white/3 p-4 sm:grid-cols-2 xl:grid-cols-6">
+        <MiniStat label="Owner" value={run.owner_subject_id} />
+        <MiniStat label="策略快照" value={run.policy_snapshot_id} />
+        <MiniStat
+          label="模型出域调用"
+          value={
+            egressCalls.length
+              ? `${egressCalls.length} 次 · ${approvedEgressCalls} 次批准`
+              : "无模型调用"
+          }
+        />
+        <MiniStat
+          label="授权范围 hash"
+          value={compactHash(run.access_scope_hash)}
+        />
+        <MiniStat
+          label="覆盖策略"
+          value={run.capability_match?.completeness_policy ?? "未匹配"}
+        />
+        <MiniStat
+          label="能力版本"
+          value={run.capability_match?.registry_version ?? "—"}
+        />
+      </div>
+      {egressCalls.length ? (
+        <details className="rounded-xl border border-violet-400/12 bg-violet-400/5 p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-violet-200">
+            调用级模型出域审计（{egressCalls.length}）
+          </summary>
+          <div className="mt-3 space-y-3">
+            {egressCalls.map((call) => (
+              <div
+                key={call.call_id}
+                className="rounded-lg border border-white/7 bg-black/10 p-3 text-xs text-slate-500"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge
+                    tone={call.decision === "approved" ? "green" : "amber"}
+                  >
+                    {call.purpose} · {call.decision} · {call.status}
+                  </Badge>
+                  <span>{call.provider}</span>
+                  <span>{call.model ?? "—"}</span>
+                  <span>
+                    端点绑定：
+                    {call.endpoint_binding_verified ? "已核验" : "未核验"}
+                  </span>
+                </div>
+                <div className="mt-2 break-all font-mono">
+                  payload：{call.exact_payload_hash} · target：
+                  {call.endpoint_target_hash || "—"}
+                </div>
+                <div className="mt-1">
+                  出域字段：{call.outbound_field_paths?.join("、") || "无"}
+                </div>
+                <div className="mt-1">
+                  {new Date(call.started_at).toLocaleString("zh-CN")} ·{" "}
+                  {call.completed_at
+                    ? new Date(call.completed_at).toLocaleString("zh-CN")
+                    : "未完成"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
       <div className="grid gap-3 rounded-xl border border-violet-400/12 bg-violet-400/5 p-4 sm:grid-cols-2 xl:grid-cols-3">
         <div>
           <div className="text-[10px] uppercase tracking-wider text-slate-500">
@@ -659,9 +1170,35 @@ function AssistantRunView({ run }: { run: RunRecord }) {
         >
           {verificationPassed ? "证据化回答" : "未核验回答（禁止采纳）"}
         </div>
+        {run.operation_ir?.answer_policy === "llm_general" ? (
+          <div className="mb-3 rounded-lg border border-violet-400/15 bg-violet-400/7 px-3 py-2 text-xs text-violet-100">
+            GPT 通用知识回答 · 未读取 metroflow
+            数据库业务行；实时信息需另接外部数据源
+          </div>
+        ) : null}
         <p className="text-sm leading-7 text-slate-200">
           {run.response?.answer ?? "尚未生成回答"}
         </p>
+        {externalLinks.length ? (
+          <div className="mt-4 border-t border-white/6 pt-3">
+            <div className="mb-2 text-xs font-semibold text-cyan-200">
+              实时路线与核验来源
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {externalLinks.map((link) => (
+                <a
+                  key={link.url}
+                  href={link.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-lg border border-cyan-400/20 bg-cyan-400/8 px-3 py-2 text-xs text-cyan-100 transition hover:border-cyan-300/40 hover:bg-cyan-400/14"
+                >
+                  {link.label}
+                </a>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {run.response?.limitations?.length ? (
           <div className="mt-3 space-y-1 border-t border-white/6 pt-3 text-xs text-amber-200/75">
             {run.response.limitations.map((item) => (
@@ -716,12 +1253,54 @@ function AssistantRunView({ run }: { run: RunRecord }) {
                   <Badge tone={tool.status === "success" ? "green" : "amber"}>
                     {tool.status}
                   </Badge>
+                  <Badge
+                    tone={
+                      tool.complete !== false && tool.truncated !== true
+                        ? "green"
+                        : "amber"
+                    }
+                  >
+                    {tool.complete !== false && tool.truncated !== true
+                      ? "完整"
+                      : "不完整"}
+                  </Badge>
                 </div>
                 <p className="mt-2 text-xs leading-5 text-slate-500">
                   {String(
                     tool.summary?.claim ?? `${tool.rows?.length ?? 0} rows`,
                   )}
                 </p>
+                <div className="mt-2 grid gap-1 font-mono text-[10px] leading-4 text-slate-600">
+                  <span>
+                    returned/matched: {tool.returned_row_count ?? 0}/
+                    {tool.matched_count_unknown
+                      ? "unknown"
+                      : (tool.matched_row_count ?? "—")}
+                  </span>
+                  <span>query: {compactHash(tool.query_fingerprint)}</span>
+                  <span>result: {compactHash(tool.result_hash)}</span>
+                  <span>
+                    coverage: {tool.coverage?.coverage_type ?? "unknown"} ·{" "}
+                    {tool.coverage?.scope_label ?? "unknown"}
+                  </span>
+                  <span>
+                    master: {tool.coverage?.authoritative_master ? "yes" : "no"}{" "}
+                    · role: {tool.coverage?.dataset_role ?? "—"} · city:{" "}
+                    {tool.coverage?.city ?? "—"}
+                  </span>
+                  {tool.coverage?.time_range &&
+                  Object.keys(tool.coverage.time_range).length ? (
+                    <span>
+                      time: {tool.coverage.time_range.start ?? "—"} →{" "}
+                      {tool.coverage.time_range.end ?? "—"}
+                    </span>
+                  ) : null}
+                  {tool.block_reason ? (
+                    <span className="text-amber-200/75">
+                      blocked: {tool.block_reason}
+                    </span>
+                  ) : null}
+                </div>
               </div>
             ))}
           </div>
@@ -766,7 +1345,7 @@ function AssistantRunView({ run }: { run: RunRecord }) {
           </div>
           <div className="min-w-0">
             <h3 className="mb-3 text-sm font-semibold text-white">
-              结果数据表
+              结果数据表 · {tableRows.length} 行
             </h3>
             <div className="overflow-auto rounded-xl border border-white/8">
               <table className="data-table">
@@ -807,10 +1386,38 @@ function AssistantRunView({ run }: { run: RunRecord }) {
                     {item.evidence_id}
                   </span>
                   <Badge tone="slate">{item.kind}</Badge>
+                  <Badge
+                    tone={
+                      item.complete !== false && item.truncated !== true
+                        ? "green"
+                        : "amber"
+                    }
+                  >
+                    {item.complete !== false && item.truncated !== true
+                      ? "完整"
+                      : "不完整"}
+                  </Badge>
                 </div>
                 <p className="mt-2 text-xs leading-5 text-slate-400">
                   {item.claim}
                 </p>
+                <div className="mt-2 space-y-1 font-mono text-[10px] text-slate-600">
+                  <div>
+                    returned/matched: {item.returned_row_count ?? 0}/
+                    {item.matched_count_unknown
+                      ? "unknown"
+                      : (item.matched_row_count ?? "—")}
+                  </div>
+                  <div>query: {compactHash(item.query_fingerprint)}</div>
+                  <div>
+                    coverage: {item.coverage?.coverage_type ?? "unknown"} ·{" "}
+                    {item.coverage?.scope_label ?? "unknown"} · master{" "}
+                    {item.coverage?.authoritative_master ? "yes" : "no"}
+                  </div>
+                  {item.source_evidence_ids?.length ? (
+                    <div>sources: {item.source_evidence_ids.join(", ")}</div>
+                  ) : null}
+                </div>
               </div>
             ))}
           </div>
@@ -856,6 +1463,13 @@ function AssistantCapabilityOverview({
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge tone="slate">{capabilities.data_scope} data</Badge>
+            <Badge tone="cyan">
+              capability registry {capabilities.capability_registry_version}
+            </Badge>
+            <Badge tone="slate">
+              {capabilities.operation_capabilities?.length ?? 0} 项 Operation
+              能力
+            </Badge>
             <Badge
               tone={
                 capabilities.active_runtime.real_model_configured
@@ -937,6 +1551,49 @@ function AssistantCapabilityOverview({
               </ul>
             </div>
           </div>
+          <details className="mt-4 rounded-xl border border-white/7 bg-white/3 p-4">
+            <summary className="cursor-pointer text-sm font-semibold text-slate-200">
+              查看 OperationIR 能力注册表（
+              {capabilities.operation_capabilities?.length ?? 0}）
+            </summary>
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {(capabilities.operation_capabilities ?? []).map((capability) => (
+                <div
+                  key={String(capability.id)}
+                  className="rounded-lg border border-white/7 bg-black/10 p-3"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <strong className="text-xs text-cyan-200">
+                      {String(capability.id)}
+                    </strong>
+                    <Badge
+                      tone={
+                        Array.isArray(capability.runtime_tools_unavailable) &&
+                        capability.runtime_tools_unavailable.length
+                          ? "amber"
+                          : "green"
+                      }
+                    >
+                      {String(capability.answer_policy ?? "unknown")}
+                    </Badge>
+                  </div>
+                  <div className="mt-2 text-[11px] leading-5 text-slate-500">
+                    Operation：
+                    {Array.isArray(capability.operations)
+                      ? capability.operations.join("、")
+                      : "—"}
+                    <br />
+                    可用工具：
+                    {Array.isArray(capability.runtime_tools_available)
+                      ? capability.runtime_tools_available.join("、") || "无"
+                      : "—"}
+                    <br />
+                    完整性：{String(capability.completeness_policy ?? "—")}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </details>
         </CardContent>
       </Card>
       <Card>
@@ -1002,6 +1659,11 @@ function AssistantCapabilityOverview({
 }
 
 function AssistantPage() {
+  const governance = useQuery({
+    queryKey: ["governance-status"],
+    queryFn: getGovernanceStatus,
+    staleTime: 30_000,
+  })
   const capabilities = useQuery({
     queryKey: ["assistant-capabilities"],
     queryFn: getAssistantCapabilities,
@@ -1010,8 +1672,10 @@ function AssistantPage() {
   const session = useQuery({
     queryKey: ["assistant-session"],
     queryFn: createAssistantSession,
+    enabled: governance.data?.assistant_enabled === true,
     staleTime: Number.POSITIVE_INFINITY,
   })
+  const assistantReady = governance.data?.assistant_enabled === true
   const [message, setMessage] = useState(assistantExamples[0])
   const [runs, setRuns] = useState<RunRecord[]>([])
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
@@ -1036,12 +1700,16 @@ function AssistantPage() {
       <PageHeading
         eyebrow="Governed agent workflow"
         title="地铁客流智能分析"
-        description="大模型负责理解、受约束规划与证据化表达；数据库和确定性工具负责事实与计算，verifier 和人工闸门负责治理。"
+        description="问题先编译为 OperationIR 并匹配版本化能力；数据问题走真实工具，开放问题进入一次 GPT 通用回答，真正缺少起点、终点或目标时才追问。"
         action={
-          capabilities.isPending ? (
+          governance.isPending || capabilities.isPending ? (
             <Badge tone="slate">正在检测运行时</Badge>
-          ) : capabilities.isError ? (
+          ) : governance.isError || capabilities.isError ? (
             <Badge tone="amber">运行时状态未知</Badge>
+          ) : governance.data && !governance.data.assistant_enabled ? (
+            <Badge tone="amber">
+              {assistantStatusLabels[governance.data.assistant_status]}
+            </Badge>
           ) : (
             <Badge
               tone={
@@ -1057,6 +1725,10 @@ function AssistantPage() {
           )
         }
       />
+      {governance.isError ? <ApiError error={governance.error} /> : null}
+      {governance.data ? (
+        <GovernanceGateBanner status={governance.data} />
+      ) : null}
       {capabilities.isError ? (
         <div className="space-y-2">
           <ApiError error={capabilities.error} />
@@ -1122,17 +1794,25 @@ function AssistantPage() {
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
                   maxLength={4000}
-                  disabled={mutation.isPending}
+                  disabled={!assistantReady || mutation.isPending}
                 />
               </Field>
               <div className="flex justify-between text-[11px] text-slate-600">
                 <span aria-live="polite">
                   {mutation.isPending
                     ? "状态机执行中，请勿重复提交"
-                    : "最多 4000 个字符"}
+                    : assistantReady
+                      ? "最多 4000 个字符"
+                      : "治理门禁未允许创建会话"}
                 </span>
                 <span>{message.length}/4000</span>
               </div>
+              {governance.data?.data_scope === "production-shadow" ? (
+                <div className="rounded-lg border border-amber-300/15 bg-amber-300/5 px-3 py-2 text-[11px] leading-5 text-amber-100/80">
+                  大型活动问题会调用真实客流上下文并检查预测准入；在场馆映射、相似活动实绩、模型回测和
+                  SOP 未核验前，系统不会生成伪预测值或运营处置方案。
+                </div>
+              ) : null}
               <div className="flex flex-wrap gap-2">
                 {assistantExamples.map((example) => (
                   <button
@@ -1140,6 +1820,7 @@ function AssistantPage() {
                     className="rounded-lg border border-white/8 px-2.5 py-1.5 text-left text-[11px] text-slate-500 hover:text-cyan-300"
                     key={example}
                     onClick={() => setMessage(example)}
+                    disabled={!assistantReady}
                   >
                     {example}
                   </button>
@@ -1148,7 +1829,10 @@ function AssistantPage() {
               <Button
                 className="w-full"
                 disabled={
-                  !session.data || mutation.isPending || !message.trim()
+                  !assistantReady ||
+                  !session.data ||
+                  mutation.isPending ||
+                  !message.trim()
                 }
               >
                 {mutation.isPending ? (
@@ -1156,7 +1840,11 @@ function AssistantPage() {
                 ) : (
                   <Sparkles className="h-4 w-4" />
                 )}
-                {mutation.isPending ? "正在执行状态机" : "开始智能分析"}
+                {mutation.isPending
+                  ? "正在执行状态机"
+                  : assistantReady
+                    ? "开始智能分析"
+                    : "治理门禁已阻断"}
               </Button>
             </form>
           </CardContent>
@@ -1166,7 +1854,8 @@ function AssistantPage() {
             <div>
               <h2 className="font-semibold text-white">回答、证据与轨迹</h2>
               <p className="mt-1 text-xs text-slate-500">
-                {session.data?.session_id ?? "正在创建会话"}
+                {session.data?.session_id ??
+                  (assistantReady ? "正在创建会话" : "会话未创建")}
               </p>
             </div>
             {selectedRun?.verification?.valid === true ? (
@@ -1178,7 +1867,11 @@ function AssistantPage() {
             )}
           </CardHeader>
           <CardContent>
-            {session.isError ? (
+            {!assistantReady && governance.data ? (
+              <EmptyState
+                text={`当前不可提交智能分析：${assistantStatusLabels[governance.data.assistant_status]}`}
+              />
+            ) : session.isError ? (
               <ApiError error={session.error} />
             ) : mutation.isError ? (
               <div className="space-y-3" aria-live="assertive">
@@ -1202,6 +1895,11 @@ function AssistantPage() {
 
 function QueryWorkbench() {
   const catalog = useQuery({ queryKey: ["catalog"], queryFn: getCatalog })
+  const governance = useQuery({
+    queryKey: ["governance-status"],
+    queryFn: getGovernanceStatus,
+    staleTime: 30_000,
+  })
   const [metric, setMetric] = useState("entries")
   const [dimension, setDimension] = useState<
     QueryRequest["dimensions"][number] | "none"
@@ -1210,10 +1908,15 @@ function QueryWorkbench() {
   const [station, setStation] = useState("all")
   const [direction, setDirection] = useState("all")
   const mutation = useMutation({ mutationFn: runQuery })
+  const selectedMetric = catalog.data?.metrics.some(
+    (item) => item.id === metric,
+  )
+    ? metric
+    : (catalog.data?.metrics[0]?.id ?? metric)
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (!catalog.data) return
+    if (!catalog.data || !governance.data) return
     const filters: QueryRequest["filters"] = []
     if (line !== "all")
       filters.push({ field: "line_id", operator: "eq", value: line })
@@ -1222,11 +1925,13 @@ function QueryWorkbench() {
     if (direction !== "all")
       filters.push({ field: "direction", operator: "eq", value: direction })
     mutation.mutate({
-      metric,
-      dimensions: dimension === "none" ? [] : [dimension],
+      ...buildQuery(
+        catalog.data,
+        selectedMetric,
+        dimension === "none" ? [] : [dimension],
+        Math.min(100, governance.data.access_scope.row_limit),
+      ),
       filters,
-      limit: 100,
-      time_range: catalog.data.default_time_range,
     })
   }
 
@@ -1237,6 +1942,8 @@ function QueryWorkbench() {
         title="受约束客流查询"
         description="只选择注册指标、维度和过滤条件；浏览器不会接收或提交自由 SQL。每次执行都会生成可回读的审计摘要。"
       />
+      {catalog.isError ? <ApiError error={catalog.error} /> : null}
+      {governance.isError ? <ApiError error={governance.error} /> : null}
       <div className="grid gap-5 xl:grid-cols-[380px_1fr]">
         <Card className="h-fit">
           <CardHeader>
@@ -1253,7 +1960,7 @@ function QueryWorkbench() {
               <Field label="业务指标">
                 <select
                   className={inputClass}
-                  value={metric}
+                  value={selectedMetric}
                   onChange={(event) => setMetric(event.target.value)}
                 >
                   {catalog.data?.metrics.map((item) => (
@@ -1326,9 +2033,18 @@ function QueryWorkbench() {
                     : "加载中"}
                 </div>
               </Field>
+              <div className="rounded-xl border border-emerald-400/12 bg-emerald-400/5 p-3 text-xs leading-5 text-slate-400">
+                本次最多返回{" "}
+                {Math.min(100, governance.data?.access_scope.row_limit ?? 100)}
+                行；最长授权时间范围{" "}
+                {governance.data?.access_scope.max_time_range_hours ?? "—"}
+                小时。城市、源版本和策略快照由后端状态自动带入。
+              </div>
               <Button
                 className="w-full"
-                disabled={!catalog.data || mutation.isPending}
+                disabled={
+                  !catalog.data || !governance.data || mutation.isPending
+                }
               >
                 {mutation.isPending ? (
                   <RefreshCw className="h-4 w-4 animate-spin" />
@@ -1371,10 +2087,18 @@ function QueryWorkbench() {
 
 function ForecastPage() {
   const catalog = useQuery({ queryKey: ["catalog"], queryFn: getCatalog })
+  const governance = useQuery({
+    queryKey: ["governance-status"],
+    queryFn: getGovernanceStatus,
+    staleTime: 30_000,
+  })
   const [referenceDate, setReferenceDate] = useState("")
   const [targetDate, setTargetDate] = useState("")
   const [schemeId, setSchemeId] = useState(1)
   const mutation = useMutation({ mutationFn: runForecast })
+  const forecastAllowed =
+    governance.data?.data_scope === "synthetic" &&
+    governance.data.access_scope.allowed_dataset_roles.includes("forecast")
   const defaultReference =
     referenceDate || catalog.data?.available_dates[0] || ""
   const defaultTarget =
@@ -1389,23 +2113,34 @@ function ForecastPage() {
 
   function submit(event: FormEvent) {
     event.preventDefault()
+    if (!governance.data || !forecastAllowed) return
     mutation.mutate({
       reference_date: defaultReference,
       target_date: defaultTarget,
       scheme_id: schemeId,
-      limit: 1000,
+      limit: Math.min(1000, governance.data.access_scope.row_limit),
     })
   }
   const rows = mutation.data?.rows ?? []
+  const forecastMetrics = useMemo(
+    () =>
+      (["entries", "exits", "transfers", "net_inflow"] as const).filter(
+        (metric) => rows.some((row) => typeof row[metric] === "number"),
+      ),
+    [rows],
+  )
+  const chartMetric = forecastMetrics[0]
   const stationTotals = useMemo(() => {
     const totals = new Map<string, number>()
+    if (!chartMetric) return []
     for (const row of rows)
       totals.set(
         String(row.station_id),
-        (totals.get(String(row.station_id)) ?? 0) + Number(row.entries),
+        (totals.get(String(row.station_id)) ?? 0) +
+          Number(row[chartMetric] ?? 0),
       )
     return [...totals.entries()]
-  }, [rows])
+  }, [chartMetric, rows])
 
   return (
     <div className="space-y-6">
@@ -1415,6 +2150,8 @@ function ForecastPage() {
         description="把参考日的站点进出站模式映射到目标日，用于验证预测链路和界面；方法明确标注为 reference_day_copy，不代表机器学习精度。"
         action={<Badge tone="amber">非 ML 模型</Badge>}
       />
+      {catalog.isError ? <ApiError error={catalog.error} /> : null}
+      {governance.isError ? <ApiError error={governance.error} /> : null}
       <div className="grid gap-5 xl:grid-cols-[380px_1fr]">
         <Card className="h-fit">
           <CardHeader>
@@ -1458,12 +2195,15 @@ function ForecastPage() {
                 />
               </Field>
               <div className="rounded-xl border border-amber-300/15 bg-amber-300/6 p-3 text-xs leading-5 text-amber-100/70">
-                输出复制参考日客流结构，仅用于受治理的 baseline
-                preview。页面不会声称模型准确率。
+                {forecastAllowed
+                  ? "输出复制参考日客流结构，仅用于受治理的 baseline preview。页面不会声称模型准确率。"
+                  : "当前数据范围或身份未授权 forecast；生产 shadow 不会把参考日复制误作生产预测。"}
               </div>
               <Button
                 className="w-full"
-                disabled={!defaultReference || mutation.isPending}
+                disabled={
+                  !forecastAllowed || !defaultReference || mutation.isPending
+                }
               >
                 {mutation.isPending ? (
                   <RefreshCw className="h-4 w-4 animate-spin" />
@@ -1500,12 +2240,14 @@ function ForecastPage() {
                   />
                   <MiniStat label="审计" value="已生成" />
                 </div>
-                <MetricChart
-                  labels={stationTotals.map(([station]) => station)}
-                  values={stationTotals.map(([, value]) => value)}
-                  name="预测进站量"
-                  color="#fbbf24"
-                />
+                {chartMetric ? (
+                  <MetricChart
+                    labels={stationTotals.map(([station]) => station)}
+                    values={stationTotals.map(([, value]) => value)}
+                    name={`预测${metricMeta[chartMetric].label}`}
+                    color="#fbbf24"
+                  />
+                ) : null}
                 <div className="overflow-auto rounded-xl border border-white/8">
                   <table className="data-table">
                     <thead>
@@ -1514,9 +2256,9 @@ function ForecastPage() {
                         <th>线路</th>
                         <th>车站</th>
                         <th>方向</th>
-                        <th>进站</th>
-                        <th>出站</th>
-                        <th>换乘</th>
+                        {forecastMetrics.map((metric) => (
+                          <th key={metric}>{metricMeta[metric].label}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
@@ -1528,9 +2270,9 @@ function ForecastPage() {
                           <td>{String(row.line_id)}</td>
                           <td>{String(row.station_id)}</td>
                           <td>{String(row.direction)}</td>
-                          <td>{formatNumber(row.entries)}</td>
-                          <td>{formatNumber(row.exits)}</td>
-                          <td>{formatNumber(row.transfers)}</td>
+                          {forecastMetrics.map((metric) => (
+                            <td key={metric}>{formatNumber(row[metric])}</td>
+                          ))}
                         </tr>
                       ))}
                     </tbody>
@@ -1549,7 +2291,7 @@ function ForecastPage() {
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-white/4 p-3">
+    <div className="min-w-0 rounded-xl bg-white/4 p-3">
       <div className="text-xs text-slate-500">{label}</div>
       <div className="mt-1 truncate text-sm font-semibold text-slate-200">
         {value}
@@ -1664,6 +2406,11 @@ function AuditDetails({ audit }: { audit: AuditSummary }) {
 function SystemPage() {
   const health = useQuery({ queryKey: ["health"], queryFn: getHealth })
   const catalog = useQuery({ queryKey: ["catalog"], queryFn: getCatalog })
+  const governance = useQuery({
+    queryKey: ["governance-status"],
+    queryFn: getGovernanceStatus,
+    staleTime: 30_000,
+  })
   return (
     <div className="space-y-6">
       <PageHeading
@@ -1676,6 +2423,7 @@ function SystemPage() {
             onClick={() => {
               health.refetch()
               catalog.refetch()
+              governance.refetch()
             }}
           >
             <RefreshCw className="h-4 w-4" />
@@ -1695,8 +2443,14 @@ function SystemPage() {
           icon={Database}
           label="数据范围"
           value={health.data?.data_scope ?? "—"}
-          status={health.data?.data_scope === "synthetic"}
-          detail="未连接生产数据库"
+          status={
+            governance.data?.data_source.runtime_quality_status === "pass"
+          }
+          detail={
+            governance.data
+              ? `${governance.data.data_source.city ?? "—"} · 注册 ${governance.data.data_source.registration_quality_status} / 运行 ${governance.data.data_source.runtime_quality_status}`
+              : "等待治理状态"
+          }
         />
         <SystemCard
           icon={ShieldCheck}
@@ -1706,6 +2460,8 @@ function SystemPage() {
           detail="TypeScript 客户端自动生成"
         />
       </div>
+      {governance.isError ? <ApiError error={governance.error} /> : null}
+      {governance.data ? <GovernanceDetails status={governance.data} /> : null}
       <Card>
         <CardHeader>
           <div>
@@ -1718,9 +2474,13 @@ function SystemPage() {
             good
             title="当前启用"
             items={[
-              "FastAPI 合成数据服务",
+              `FastAPI ${health.data?.data_scope ?? "受治理"} 数据服务`,
               "受约束 QueryIR 查询",
-              "指定日 baseline preview",
+              ...(governance.data?.access_scope.allowed_dataset_roles.includes(
+                "forecast",
+              ) && governance.data.data_scope === "synthetic"
+                ? ["指定日 baseline preview"]
+                : []),
               "脱敏审计摘要",
               "React + ECharts 展示",
             ]}
@@ -1729,8 +2489,13 @@ function SystemPage() {
             title="明确未启用"
             items={[
               "自由 SQL / 模型生成 SQL",
-              "生产数据库连接",
+              ...(!governance.data?.assistant_enabled
+                ? ["被治理门禁阻断的 Assistant 会话"]
+                : []),
               "自动写入与处置",
+              ...(!governance.data?.identity.multi_user_isolation
+                ? ["多用户 IdP 与强隔离（当前为单主体静态令牌）"]
+                : []),
               "公网域名与 HTTPS",
               "真实预测精度声明",
             ]}
@@ -1843,6 +2608,19 @@ function Boundary({
 export function App() {
   const [page, setPage] = useState<Page>("dashboard")
   const [menuOpen, setMenuOpen] = useState(false)
+  const governance = useQuery({
+    queryKey: ["governance-status"],
+    queryFn: getGovernanceStatus,
+    staleTime: 30_000,
+  })
+  const runtimeLabel =
+    governance.data?.data_scope === "production-shadow"
+      ? "Real MySQL · Local shadow"
+      : governance.data?.data_scope === "production-readonly"
+        ? "Production read-only"
+        : governance.data?.data_scope === "synthetic"
+          ? "Synthetic environment"
+          : "Detecting environment"
   const selected = navigation.find((item) => item.id === page) ?? navigation[0]
   const PageComponent =
     page === "dashboard"
@@ -1966,10 +2744,15 @@ export function App() {
               <Bell className="h-4 w-4" />
             </button>
             <div className="hidden items-center gap-2 rounded-xl border border-white/8 bg-white/3 px-3 py-2 sm:flex">
-              <span className="h-2 w-2 rounded-full bg-emerald-400" />
-              <span className="text-xs text-slate-400">
-                Synthetic environment
-              </span>
+              <span
+                className={cn(
+                  "h-2 w-2 rounded-full",
+                  governance.data?.data_scope === "production-shadow"
+                    ? "bg-amber-400"
+                    : "bg-emerald-400",
+                )}
+              />
+              <span className="text-xs text-slate-400">{runtimeLabel}</span>
             </div>
           </div>
         </header>

@@ -72,6 +72,54 @@ class ContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid direction"):
             validate_query_ir(query, registry, "test")
 
+    def test_query_ir_v2_routing_and_order_fields_are_validated(self) -> None:
+        registry = {
+            "entries": {
+                "dimensions": ["station"],
+                "version": "1.0.0",
+                "allowed_grains": ["source", "10m"],
+            }
+        }
+        query = {
+            "metric": "entries",
+            "metric_version": "1.0.0",
+            "city": "beijing-test",
+            "dataset_role": "actual",
+            "source_version": "approved-test-v1",
+            "time_grain": "10m",
+            "time_basis": "event_time",
+            "timezone": "Asia/Shanghai",
+            "cross_midnight_policy": "reject",
+            "comparison_periods": {
+                "baseline": {
+                    "start": "2026-07-20T08:00:00+08:00",
+                    "end": "2026-07-20T08:30:00+08:00",
+                },
+                "comparison": {
+                    "start": "2026-07-20T08:30:00+08:00",
+                    "end": "2026-07-20T09:00:00+08:00",
+                },
+                "relation": "explicit",
+            },
+            "time_range": {
+                "start": "2026-07-20T08:00:00+08:00",
+                "end": "2026-07-20T09:00:00+08:00",
+            },
+            "dimensions": ["station"],
+            "filters": [],
+            "order_by": [{"field": "entries", "direction": "desc"}],
+            "limit": 10,
+        }
+        validate_query_ir(query, registry, "test")
+        query["order_by"] = [{"field": "unregistered", "direction": "desc"}]
+        with self.assertRaisesRegex(ValueError, "invalid order_by"):
+            validate_query_ir(query, registry, "test")
+
+        query["order_by"] = []
+        query["time_basis"] = "service_day"
+        with self.assertRaisesRegex(ValueError, "requires day and calendar version"):
+            validate_query_ir(query, registry, "test")
+
 
 if __name__ == "__main__":
     unittest.main()

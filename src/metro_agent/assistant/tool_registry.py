@@ -1,33 +1,61 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import os
 import statistics
 import uuid
 from collections.abc import Callable
+from contextvars import ContextVar
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
+from metro_agent.access import AccessContext, AuthorizationService
 from metro_agent.api.models import ForecastRequest, QueryRequest
-from metro_agent.api.service import SyntheticApiService
+from metro_agent.api.service import PassengerFlowDataService
 from metro_agent.assistant.schemas import ActionPlan, ToolResult
 
 ToolHandler = Callable[[dict[str, Any], list[ToolResult]], dict[str, Any]]
+
+_ACCESS_CONTEXT: ContextVar[AccessContext | None] = ContextVar(
+    "metro_tool_access_context", default=None
+)
+
+_REQUIRES_COMPLETE_INPUT = {
+    "calculate_growth",
+    "calculate_correlation",
+    "calculate_lagged_correlation",
+    "detect_anomalies",
+    "decompose_time_series",
+    "run_time_series_forecast",
+    "backtest_time_series",
+    "compare_groups",
+    "compare_forecast_with_baseline",
+    "diagnose_flow_change",
+}
 
 
 class ToolRegistry:
     """Allowlisted deterministic tools. No free SQL or arbitrary call surface."""
 
-    def __init__(self, data_service: SyntheticApiService, artifact_dir: Path) -> None:
+    def __init__(self, data_service: PassengerFlowDataService, artifact_dir: Path) -> None:
         self.data_service = data_service
         self.artifact_dir = artifact_dir
         artifact_dir.mkdir(parents=True, exist_ok=True)
         self._tools: dict[str, ToolHandler] = {
             "get_metric_catalog": self._catalog,
+            "list_metrics": self._catalog,
+            "list_available_dates": self._available_dates,
+            "describe_data_scope": self._data_scope,
+            "resolve_metro_entity": self._resolve_entity,
+            "describe_observed_entity": self._describe_entity,
+            "get_data_quality_status": self._quality_status,
             "get_audit_summary": self._audit_summary,
             "query_metric": self._query,
+            "list_observed_entities": self._observed_entities,
             "query_ticket_flow": self._ticket_flow,
             "compare_metric_periods": self._compare,
             "rank_stations": self._rank,
@@ -47,6 +75,8 @@ class ToolRegistry:
             "find_similar_historical_days": self._similar_days,
             "compare_forecast_with_baseline": self._compare_forecast,
             "run_event_forecast": self._event_forecast,
+            "assess_event_forecast_readiness": self._event_forecast_readiness,
+            "assess_task_readiness": self._task_readiness,
             "evaluate_forecast": self._evaluate_forecast,
             "query_rail_transactions": self._rail_transactions,
             "query_bus_transactions": self._bus_transactions,
@@ -71,7 +101,34 @@ class ToolRegistry:
             "build_event_report": self._report,
             "build_alert_brief": self._report,
             "export_report": self._report,
+            "plan_public_transit_route": self._travel_plan,
+            "describe_assistant_capabilities": self._assistant_capabilities,
+            "prepare_general_context": self._general_context,
         }
+        if data_service.data_scope != "synthetic":
+            admitted = {
+                "get_metric_catalog",
+                "list_metrics",
+                "list_available_dates",
+                "describe_data_scope",
+                "get_data_quality_status",
+                "get_audit_summary",
+                "query_metric",
+                "list_observed_entities",
+                "describe_observed_entity",
+                "compare_metric_periods",
+                "rank_stations",
+                "rank_contributors",
+                "calculate_growth",
+                "assess_event_forecast_readiness",
+                "assess_task_readiness",
+                "plan_public_transit_route",
+                "describe_assistant_capabilities",
+                "prepare_general_context",
+            }
+            self._tools = {
+                name: handler for name, handler in self._tools.items() if name in admitted
+            }
 
     @property
     def names(self) -> list[str]:
@@ -83,6 +140,7 @@ class ToolRegistry:
         tool: str,
         arguments: dict[str, Any],
         dependencies: list[ToolResult],
+        access_context: AccessContext | None = None,
     ) -> ToolResult:
         handler = self._tools.get(tool)
         if handler is None:
@@ -92,17 +150,81 @@ class ToolRegistry:
                 status="failed",
                 error_code="unknown_tool",
                 warnings=["tool is not registered"],
+                complete=False,
+                block_reason="tool is not registered",
             )
+        if tool in _REQUIRES_COMPLETE_INPUT and any(
+            not item.complete or item.truncated for item in dependencies
+        ):
+            return ToolResult(
+                step_id=step_id,
+                tool=tool,
+                status="failed",
+                error_code="incomplete_dependency",
+                warnings=["tool requires complete, non-truncated dependency results"],
+                complete=False,
+                source_step_ids=[item.step_id for item in dependencies],
+                block_reason="incomplete dependency result",
+            )
+        token = _ACCESS_CONTEXT.set(access_context)
         try:
             output = handler(dict(arguments), dependencies)
+            rows = output.get("rows", [])
+            summary = output.get("summary", {})
+            provenance = summary.get("provenance", {})
+            truncated = bool(output.get("truncated", provenance.get("truncated", False)))
+            complete = bool(output.get("complete", provenance.get("complete", not truncated)))
+            matched = output.get(
+                "matched_row_count",
+                provenance.get("matched_row_count", provenance.get("total_group_count")),
+            )
+            coverage = output.get("coverage") or _coverage_for(
+                tool=tool,
+                arguments=arguments,
+                summary=summary,
+                rows=rows,
+                matched=matched if isinstance(matched, int) else None,
+                complete=complete,
+                truncated=truncated,
+            )
+            logical_plan_hash = _hash_payload(
+                {
+                    "tool": tool,
+                    "arguments": arguments,
+                    "source_steps": [item.step_id for item in dependencies],
+                }
+            )
             return ToolResult(
                 step_id=step_id,
                 tool=tool,
                 status="success",
-                summary=output.get("summary", {}),
-                rows=output.get("rows", []),
+                summary=summary,
+                rows=rows,
                 artifact_refs=output.get("artifact_refs", []),
                 warnings=output.get("warnings", []),
+                returned_row_count=len(rows),
+                matched_row_count=matched if isinstance(matched, int) else None,
+                matched_count_unknown=matched is None,
+                complete=complete,
+                truncated=truncated,
+                query_fingerprint=provenance.get("query_fingerprint"),
+                logical_plan_hash=logical_plan_hash,
+                result_hash=_hash_payload({"summary": summary, "rows": rows}),
+                source_step_ids=[item.step_id for item in dependencies],
+                calculation_method=output.get("calculation_method") or summary.get("method"),
+                policy_snapshot_id=(access_context.policy_snapshot_id if access_context else None),
+                access_scope_hash=(access_context.scope_hash() if access_context else None),
+                coverage=coverage,
+            )
+        except PermissionError as exc:
+            return ToolResult(
+                step_id=step_id,
+                tool=tool,
+                status="failed",
+                error_code="forbidden",
+                warnings=[str(exc)],
+                complete=False,
+                block_reason="authorization denied",
             )
         except (ValueError, TypeError, KeyError, statistics.StatisticsError) as exc:
             return ToolResult(
@@ -111,6 +233,8 @@ class ToolRegistry:
                 status="failed",
                 error_code="invalid_tool_input",
                 warnings=[str(exc)],
+                complete=False,
+                block_reason=str(exc),
             )
         except Exception:
             return ToolResult(
@@ -119,11 +243,353 @@ class ToolRegistry:
                 status="failed",
                 error_code="tool_runtime_error",
                 warnings=["tool execution failed; implementation details were redacted"],
+                complete=False,
+                block_reason="redacted tool runtime failure",
             )
+        finally:
+            _ACCESS_CONTEXT.reset(token)
 
     def _catalog(self, _: dict[str, Any], __: list[ToolResult]) -> dict[str, Any]:
-        catalog = self.data_service.catalog()
-        return {"summary": {"claim": "已读取受控指标目录"}, "rows": catalog["metrics"]}
+        catalog = self.data_service.catalog(_ACCESS_CONTEXT.get())
+        metrics = list(catalog["metrics"])
+        return {
+            "summary": {
+                "claim": f"受控指标目录共登记 {len(metrics)} 个可查询指标",
+                "provenance": {
+                    "city": catalog.get("city"),
+                    "source_version": catalog.get("source_version"),
+                    "quality_status": catalog.get("quality_status", "unknown"),
+                    "data_scope": catalog.get("data_scope"),
+                },
+            },
+            "rows": metrics,
+            "complete": True,
+            "truncated": False,
+            "matched_row_count": len(metrics),
+            "coverage": {
+                "coverage_type": "registered_catalog",
+                "scope_label": "registered_metric_catalog",
+                "authoritative_master": True,
+                "returned_count": len(metrics),
+                "matched_count": len(metrics),
+                "complete": True,
+                "truncated": False,
+                "city": catalog.get("city"),
+                "source_version": catalog.get("source_version"),
+                "freshness_status": catalog.get("freshness_status"),
+            },
+        }
+
+    def _available_dates(self, _: dict[str, Any], __: list[ToolResult]) -> dict[str, Any]:
+        catalog = self.data_service.catalog(_ACCESS_CONTEXT.get())
+        rows = [{"date": str(value)} for value in catalog.get("available_dates", [])]
+        default_range = catalog.get("default_time_range") or {}
+        return {
+            "summary": {
+                "claim": f"当前准入数据目录覆盖 {len(rows)} 个可用日期",
+                "available_date_count": len(rows),
+                "time_range": default_range,
+                "provenance": {
+                    "city": catalog.get("city"),
+                    "source_version": catalog.get("source_version"),
+                    "data_scope": catalog.get("data_scope"),
+                },
+            },
+            "rows": rows,
+            "complete": True,
+            "truncated": False,
+            "matched_row_count": len(rows),
+            "coverage": {
+                "coverage_type": "registered_catalog",
+                "scope_label": "registered_available_dates",
+                "authoritative_master": True,
+                "time_range": default_range,
+                "returned_count": len(rows),
+                "matched_count": len(rows),
+                "complete": True,
+                "truncated": False,
+                "city": catalog.get("city"),
+                "dataset_role": "actual",
+                "source_version": catalog.get("source_version"),
+            },
+        }
+
+    def _data_scope(self, _: dict[str, Any], __: list[ToolResult]) -> dict[str, Any]:
+        catalog = self.data_service.catalog(_ACCESS_CONTEXT.get())
+        quality = self.data_service.quality_status(_ACCESS_CONTEXT.get())
+        metrics = list(catalog.get("metrics", []))
+        dates = list(catalog.get("available_dates", []))
+        rows = [
+            {
+                "data_scope": self.data_service.data_scope,
+                "city": catalog.get("city"),
+                "source_version": catalog.get("source_version"),
+                "dataset_role": "actual",
+                "metric_count": len(metrics),
+                "available_date_count": len(dates),
+                "quality_status": quality.get("status", "unknown"),
+                "default_time_start": (catalog.get("default_time_range") or {}).get("start"),
+                "default_time_end": (catalog.get("default_time_range") or {}).get("end"),
+            }
+        ]
+        return {
+            "summary": {
+                "claim": (
+                    f"当前为 {self.data_service.data_scope} 数据源，城市 {catalog.get('city')}，"
+                    f"登记 {len(metrics)} 个指标、覆盖 {len(dates)} 个可用日期，"
+                    f"质量状态为 {quality.get('status', 'unknown')}"
+                ),
+                "provenance": {
+                    "city": catalog.get("city"),
+                    "source_version": catalog.get("source_version"),
+                    "data_scope": self.data_service.data_scope,
+                    "quality_status": quality.get("status", "unknown"),
+                },
+            },
+            "rows": rows,
+            "warnings": list(quality.get("flags", [])),
+            "complete": True,
+            "truncated": False,
+            "matched_row_count": 1,
+            "coverage": {
+                "coverage_type": "registered_catalog",
+                "scope_label": "registered_data_product_scope",
+                "authoritative_master": True,
+                "time_range": catalog.get("default_time_range") or {},
+                "returned_count": 1,
+                "matched_count": 1,
+                "complete": True,
+                "truncated": False,
+                "city": catalog.get("city"),
+                "dataset_role": "actual",
+                "source_version": catalog.get("source_version"),
+                "freshness_status": quality.get("freshness_status"),
+            },
+        }
+
+    def _travel_plan(self, arguments: dict[str, Any], _: list[ToolResult]) -> dict[str, Any]:
+        origin = str(arguments.get("origin") or "").strip()
+        destination = str(arguments.get("destination") or "").strip()
+        if not origin or not destination:
+            raise ValueError("travel plan requires both origin and destination")
+        if _normalize_place(origin) == _normalize_place(destination):
+            raise ValueError("travel plan origin and destination must differ")
+        mode = str(arguments.get("mode") or "public_transit")
+        if mode not in {"public_transit", "driving", "walking"}:
+            raise ValueError("unsupported travel mode")
+        city = str(arguments.get("city") or "北京").strip() or "北京"
+        navigation_links = _navigation_links(origin, destination, city, mode)
+        registry = _travel_route_registry()
+        matched_route = next(
+            (
+                route
+                for route in registry.get("routes", [])
+                if _place_matches(origin, route.get("origin", {}))
+                and _place_matches(destination, route.get("destination", {}))
+            ),
+            None,
+        )
+        warnings = ["轨道运营状态、临时封站、步行入口和道路情况会变化，出发前请打开实时导航复核。"]
+        if matched_route is not None:
+            rows = [dict(leg) for leg in matched_route.get("legs", [])]
+            route_text = "；".join(
+                str(row.get("instruction")).rstrip("。；") for row in rows if row.get("instruction")
+            )
+            if route_text:
+                route_text += "。"
+            assumption = str(matched_route.get("assumption") or "").strip()
+            claim = f"{assumption}建议路线：{route_text}"
+            source_refs = list(matched_route.get("source_refs", []))
+            recommendations = [
+                "优先采用地铁方案，减少地面交通拥堵的不确定性。",
+                "出发前通过实时导航确认首末段步行、出入口和临时运营调整。",
+            ]
+            route_status = "verified_static_route_with_live_handoff"
+            source_version = str(matched_route.get("last_verified") or "") or None
+        else:
+            rows = [
+                {
+                    "origin": origin,
+                    "destination": destination,
+                    "mode": mode,
+                    "navigation_url": navigation_links[0]["url"],
+                }
+            ]
+            claim = (
+                f"已识别从{origin}到{destination}的出行需求；当前本地路线登记表没有这组地点的"
+                "已核验静态线路，已生成实时地图导航入口。"
+            )
+            source_refs = [
+                {
+                    "label": "百度地图 URI API 文档",
+                    "url": "https://api.map.baidu.com/lbsapi/cloud/uri.htm",
+                }
+            ]
+            recommendations = ["打开实时导航，根据当前交通状态选择公交、驾车或步行方案。"]
+            route_status = "live_navigation_handoff"
+            source_version = str(registry.get("registry_version") or "") or None
+        return {
+            "summary": {
+                "claim": claim,
+                "route_status": route_status,
+                "origin": origin,
+                "destination": destination,
+                "city": city,
+                "mode": mode,
+                "departure_time": arguments.get("departure_time"),
+                "navigation_links": navigation_links,
+                "source_refs": source_refs,
+                "recommendations": recommendations,
+                "assumptions": [
+                    str(matched_route.get("assumption"))
+                    if matched_route is not None
+                    else "起终点按用户输入交给实时地图解析。"
+                ],
+                "scope": "public_route_reference_and_live_navigation_handoff",
+            },
+            "rows": rows,
+            "warnings": warnings,
+            "complete": True,
+            "truncated": False,
+            "matched_row_count": len(rows),
+            "coverage": {
+                "coverage_type": "external_navigation",
+                "scope_label": "public_route_reference_and_live_navigation_handoff",
+                "authoritative_master": False,
+                "returned_count": len(rows),
+                "matched_count": len(rows),
+                "complete": True,
+                "truncated": False,
+                "city": city,
+                "source_version": source_version,
+                "freshness_status": "live_handoff_required",
+            },
+        }
+
+    def _assistant_capabilities(self, _: dict[str, Any], __: list[ToolResult]) -> dict[str, Any]:
+        registry = _assistant_capability_registry()
+        labels = {
+            "entity_inventory": "车站与线路清单",
+            "metric_catalog": "指标目录",
+            "date_catalog": "数据日期范围",
+            "data_scope_summary": "数据库概况",
+            "entity_description": "实体说明",
+            "metric_query": "客流指标查询",
+            "entity_ranking": "站点与线路排行",
+            "period_comparison": "时段对比",
+            "forecast_synthetic": "合成预测演练",
+            "forecast_readiness": "真实预测准入检查",
+            "synthetic_extended_analysis": "预警、换乘、GIS、诊断、趋势与报告演练",
+            "production_capability_readiness": "生产能力准入检查",
+            "travel_planning": "出行规划与实时导航",
+            "assistant_capability_help": "能力和使用帮助",
+            "general_question_answering": "GPT 通用问答",
+        }
+        rows = [
+            {
+                "capability": str(item.get("id")),
+                "label": labels.get(str(item.get("id")), str(item.get("id"))),
+                "operations": "、".join(str(value) for value in item.get("operations", [])),
+                "answer_policy": str(item.get("answer_policy")),
+            }
+            for item in registry.get("capabilities", [])
+            if self.data_service.data_scope in item.get("data_scopes", [])
+        ]
+        return {
+            "summary": {
+                "claim": f"当前智能分析已登记 {len(rows)} 类可路由能力",
+                "registry_version": registry.get("registry_version"),
+                "scope": "assistant_capability_registry",
+            },
+            "rows": rows,
+            "complete": True,
+            "truncated": False,
+            "matched_row_count": len(rows),
+            "coverage": {
+                "coverage_type": "registered_catalog",
+                "scope_label": "assistant_capability_registry",
+                "authoritative_master": True,
+                "returned_count": len(rows),
+                "matched_count": len(rows),
+                "complete": True,
+                "truncated": False,
+                "source_version": registry.get("registry_version"),
+            },
+        }
+
+    def _general_context(self, arguments: dict[str, Any], _: list[ToolResult]) -> dict[str, Any]:
+        question = str(arguments.get("question") or "").strip()
+        if not question:
+            raise ValueError("general answer requires a question")
+        rows = [
+            {
+                "answer_mode": "gpt_general_knowledge",
+                "domain_context": "urban_rail_passenger_flow_assistant",
+                "data_scope": self.data_service.data_scope,
+                "database_rows_included": False,
+                "live_external_data_included": False,
+            }
+        ]
+        return {
+            "summary": {
+                "claim": (
+                    "已进入 GPT 通用问答模式；本步骤未读取 metroflow 业务数据行，"
+                    "回答不得冒充数据库查询或实时外部事实。"
+                ),
+                "answer_mode": "gpt_general_knowledge",
+                "scope": "general_knowledge_with_explicit_data_boundary",
+            },
+            "rows": rows,
+            "warnings": [
+                "通用模型知识可能不是实时信息；涉及当前状态时需要接入并引用外部实时数据源。"
+            ],
+            "complete": True,
+            "truncated": False,
+            "matched_row_count": 1,
+            "coverage": {
+                "coverage_type": "general_context",
+                "scope_label": "general_knowledge_with_explicit_data_boundary",
+                "authoritative_master": False,
+                "returned_count": 1,
+                "matched_count": 1,
+                "complete": True,
+                "truncated": False,
+            },
+        }
+
+    def _resolve_entity(self, arguments: dict[str, Any], _: list[ToolResult]) -> dict[str, Any]:
+        query = str(arguments.get("query") or "").strip()
+        if not query:
+            raise ValueError("entity query is required")
+        catalog = self.data_service.catalog(_ACCESS_CONTEXT.get())
+        candidates = [
+            {"entity_type": kind, "id": value, "label": value, "confidence": 1.0}
+            for kind, values in (("line", catalog["lines"]), ("station", catalog["stations"]))
+            for value in values
+            if query.lower() in value.lower()
+        ][:20]
+        warnings = [] if candidates else ["no authorized entity candidate matched"]
+        return {
+            "summary": {"claim": f"实体解析返回 {len(candidates)} 个授权候选"},
+            "rows": candidates,
+            "warnings": warnings,
+        }
+
+    def _quality_status(self, _: dict[str, Any], __: list[ToolResult]) -> dict[str, Any]:
+        status = self.data_service.quality_status(_ACCESS_CONTEXT.get())
+        return {
+            "summary": {
+                "claim": f"当前数据质量状态为 {status['status']}",
+                "provenance": {
+                    "quality_status": status["status"],
+                    "source_version": status.get("source_version"),
+                    "city": status.get("city"),
+                    "data_scope": status.get("data_scope"),
+                },
+            },
+            "rows": [status],
+            "warnings": list(status.get("flags", [])),
+        }
 
     def _audit_summary(
         self, arguments: dict[str, Any], dependencies: list[ToolResult]
@@ -133,7 +599,7 @@ class ToolRegistry:
             audit_id = dependencies[-1].summary.get("audit_id")
         if not isinstance(audit_id, str) or not audit_id:
             raise ValueError("audit_id is required directly or from a query dependency")
-        audit = self.data_service.audit(audit_id)
+        audit = self.data_service.audit(audit_id, _ACCESS_CONTEXT.get())
         return {
             "summary": {
                 "claim": f"审计记录 {audit_id} 已回读，操作类型为 {audit['operation']}",
@@ -143,17 +609,179 @@ class ToolRegistry:
         }
 
     def _query(self, arguments: dict[str, Any], _: list[ToolResult]) -> dict[str, Any]:
-        result = self.data_service.query(QueryRequest.model_validate(arguments))
-        total = sum(float(row.get(result["metric"], 0)) for row in result["rows"])
+        request = QueryRequest.model_validate(arguments)
+        result = self.data_service.query(request, _ACCESS_CONTEXT.get())
+        provenance = result.get("provenance", {})
+        complete = bool(provenance.get("complete", not provenance.get("truncated", False)))
+        total = (
+            sum(float(row.get(result["metric"], 0)) for row in result["rows"]) if complete else None
+        )
+        claim = f"{result['metric']} 查询返回 {result['row_count']} 行"
+        if total is not None:
+            claim += f"，合计 {total:g}"
+        else:
+            claim += "；结果不完整，未计算合计"
         return {
             "summary": {
-                "claim": f"{result['metric']} 查询返回 {result['row_count']} 行，合计 {total:g}",
+                "claim": claim,
                 "metric": result["metric"],
                 "row_count": result["row_count"],
                 "total": total,
                 "audit_id": result["audit"]["audit_id"],
+                "query_ir": request.to_query_ir(),
+                "provenance": provenance,
             },
             "rows": result["rows"],
+            "complete": complete,
+            "truncated": bool(provenance.get("truncated", False)),
+            "matched_row_count": provenance.get("matched_row_count"),
+            "calculation_method": "governed_metric_query",
+        }
+
+    def _observed_entities(self, arguments: dict[str, Any], _: list[ToolResult]) -> dict[str, Any]:
+        entity_type = str(arguments.get("entity_type") or "")
+        if entity_type not in {"station", "line"}:
+            raise ValueError("entity_type must be station or line")
+        request = QueryRequest.model_validate(arguments.get("query"))
+        if request.dimensions != [entity_type]:
+            raise ValueError("entity inventory requires exactly one matching dimension")
+        if request.order_by:
+            raise ValueError("entity inventory must use stable identifier order")
+
+        result = self.data_service.query(request, _ACCESS_CONTEXT.get())
+        labels = self.data_service.entity_labels(entity_type, request, _ACCESS_CONTEXT.get())
+        provenance = result.get("provenance", {})
+        complete = bool(provenance.get("complete", not provenance.get("truncated", False)))
+        matched = provenance.get("matched_row_count")
+        if not complete or provenance.get("truncated"):
+            raise ValueError("entity inventory is incomplete; narrow scope or raise the row limit")
+
+        name_field = f"{entity_type}_name"
+        entities: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for source_row in result.get("rows", []):
+            entity_id = source_row.get(entity_type)
+            if entity_id is None or not str(entity_id).strip():
+                raise ValueError("entity inventory contains a missing identifier")
+            normalized_id = str(entity_id).strip()
+            if normalized_id in seen:
+                raise ValueError("entity inventory contains duplicate identifiers")
+            seen.add(normalized_id)
+            row = {entity_type: normalized_id}
+            entity_name = labels.get(normalized_id)
+            if entity_name is not None and str(entity_name).strip():
+                row[name_field] = str(entity_name).strip()
+            entities.append(row)
+
+        if isinstance(matched, int) and matched != len(entities):
+            raise ValueError("entity inventory completeness count does not match returned rows")
+
+        label = "站点" if entity_type == "station" else "线路"
+        display_values = [
+            (
+                f"{row[name_field]}（{row[entity_type]}）"
+                if row.get(name_field) and row[name_field] != row[entity_type]
+                else row[entity_type]
+            )
+            for row in entities
+        ]
+        scope_warning = (
+            "该清单是当前已准入实际客流时间窗中完整出现的实体，"
+            "不是对数据库全部表进行扫描得到的权威主数据清单"
+        )
+        warnings = [scope_warning]
+        if entities and not any(row.get(name_field) for row in entities):
+            warnings.append(f"当前来源没有提供已核验的{label}名称，仅返回编码")
+        return {
+            "summary": {
+                "claim": (
+                    f"当前已准入实际客流时间窗中完整观测到 {len(entities)} 个{label}："
+                    + "、".join(display_values)
+                ),
+                "entity_type": entity_type,
+                "entity_count": len(entities),
+                "entities": entities,
+                "scope": "approved_actual_flow_observation_window",
+                "authoritative_master": False,
+                "scope_warning": scope_warning,
+                "query_ir": request.to_query_ir(),
+                "provenance": provenance,
+            },
+            "rows": entities,
+            "warnings": warnings,
+            "complete": True,
+            "truncated": False,
+            "matched_row_count": len(entities),
+            "calculation_method": "complete_distinct_observed_entity_inventory",
+            "coverage": {
+                "coverage_type": "observed_window",
+                "scope_label": "approved_actual_flow_observation_window",
+                "authoritative_master": False,
+                "time_range": request.time_range.model_dump(mode="json"),
+                "returned_count": len(entities),
+                "matched_count": len(entities),
+                "complete": True,
+                "truncated": False,
+                "city": request.city,
+                "dataset_role": request.dataset_role,
+                "source_version": request.source_version,
+                "freshness_status": provenance.get("freshness_status"),
+            },
+        }
+
+    def _describe_entity(
+        self, arguments: dict[str, Any], dependencies: list[ToolResult]
+    ) -> dict[str, Any]:
+        inventory = self._observed_entities(arguments, dependencies)
+        entity_type = str(arguments.get("entity_type"))
+        target = str(arguments.get("target_query") or "").strip().lower()
+        if not target:
+            raise ValueError("target_query is required")
+        name_field = f"{entity_type}_name"
+        matches = [
+            row
+            for row in inventory["rows"]
+            if target in str(row.get(entity_type, "")).lower()
+            or target in str(row.get(name_field, "")).lower()
+        ]
+        if not matches:
+            raise ValueError("requested entity was not observed in the approved data window")
+        label = "站点" if entity_type == "station" else "线路"
+        rendered = [
+            (
+                f"{row.get(name_field)}（{row[entity_type]}）"
+                if row.get(name_field) and row.get(name_field) != row[entity_type]
+                else str(row[entity_type])
+            )
+            for row in matches
+        ]
+        coverage = dict(inventory["coverage"])
+        coverage.update(
+            {
+                "scope_label": "matched_entities_in_approved_observation_window",
+                "returned_count": len(matches),
+                "matched_count": len(matches),
+            }
+        )
+        return {
+            "summary": {
+                "claim": f"在当前准入实际客流时间窗中匹配到 {len(matches)} 个{label}："
+                + "、".join(rendered),
+                "entity_type": entity_type,
+                "target_query": target,
+                "scope": inventory["summary"]["scope"],
+                "authoritative_master": False,
+                "scope_warning": inventory["summary"]["scope_warning"],
+                "query_ir": inventory["summary"]["query_ir"],
+                "provenance": inventory["summary"]["provenance"],
+            },
+            "rows": matches,
+            "warnings": inventory["warnings"],
+            "complete": True,
+            "truncated": False,
+            "matched_row_count": len(matches),
+            "calculation_method": "exact_observed_entity_match",
+            "coverage": coverage,
         }
 
     def _ticket_flow(self, arguments: dict[str, Any], _: list[ToolResult]) -> dict[str, Any]:
@@ -174,15 +802,23 @@ class ToolRegistry:
 
     def _compare(self, arguments: dict[str, Any], _: list[ToolResult]) -> dict[str, Any]:
         request = QueryRequest.model_validate(arguments)
-        midpoint = (
-            request.time_range.start + (request.time_range.end - request.time_range.start) / 2
-        )
+        periods = request.comparison_periods
+        if periods is None:
+            raise ValueError("comparison requires explicit baseline and comparison periods")
         first = request.model_copy(deep=True)
         second = request.model_copy(deep=True)
-        first.time_range.end = midpoint
-        second.time_range.start = midpoint
-        first_result = self.data_service.query(first)
-        second_result = self.data_service.query(second)
+        first.time_range = periods.baseline
+        second.time_range = periods.comparison
+        first.comparison_periods = None
+        second.comparison_periods = None
+        first.dimensions = []
+        second.dimensions = []
+        first.order_by = []
+        second.order_by = []
+        first.limit = 1
+        second.limit = 1
+        first_result = self.data_service.query(first, _ACCESS_CONTEXT.get())
+        second_result = self.data_service.query(second, _ACCESS_CONTEXT.get())
         metric = request.metric
         first_total = sum(float(row.get(metric, 0)) for row in first_result["rows"])
         second_total = sum(float(row.get(metric, 0)) for row in second_result["rows"])
@@ -198,22 +834,82 @@ class ToolRegistry:
                 "baseline": first_total,
                 "comparison": second_total,
                 "growth_rate": growth,
+                "method": "explicit_period_pair",
+                "comparison_relation": periods.relation,
+                "provenance": {
+                    "complete": True,
+                    "truncated": False,
+                    "baseline_query_fingerprint": first_result["provenance"].get(
+                        "query_fingerprint"
+                    ),
+                    "comparison_query_fingerprint": second_result["provenance"].get(
+                        "query_fingerprint"
+                    ),
+                },
             },
             "rows": [
                 {"period": "baseline", "value": first_total},
                 {"period": "comparison", "value": second_total},
             ],
             "warnings": ["基期为零，未报告误导性的增长率"] if growth is None else [],
+            "complete": True,
+            "matched_row_count": 2,
+            "calculation_method": "explicit_period_pair",
         }
 
     def _rank(self, arguments: dict[str, Any], dependencies: list[ToolResult]) -> dict[str, Any]:
-        rows = _rows(arguments, dependencies)
-        metric = arguments.get("metric") or _numeric_column(rows)
-        ranked = sorted(rows, key=lambda row: float(row.get(metric, 0)), reverse=True)
         top_n = int(arguments.get("top_n", 10))
+        if not 1 <= top_n <= 100:
+            raise ValueError("top_n must be between 1 and 100")
+        metric = str(arguments.get("metric") or "")
+        query_ir = dependencies[0].summary.get("query_ir") if dependencies else None
+        if isinstance(query_ir, dict):
+            if not metric:
+                metric = str(query_ir.get("metric") or "")
+            ranked_request = QueryRequest.model_validate(
+                {
+                    **query_ir,
+                    "order_by": [{"field": metric, "direction": "desc"}],
+                    "limit": top_n,
+                }
+            )
+            result = self.data_service.query(ranked_request, _ACCESS_CONTEXT.get())
+            rows = result["rows"]
+            matched = result.get("provenance", {}).get("matched_row_count")
+            return {
+                "summary": {
+                    "claim": f"已在完整授权范围内按 {metric} 计算全局前 {len(rows)} 项",
+                    "metric": metric,
+                    "top_n": top_n,
+                    "population_row_count": matched,
+                    "query_ir": ranked_request.to_query_ir(),
+                    "provenance": {
+                        **result.get("provenance", {}),
+                        "complete": True,
+                        "truncated": False,
+                        "matched_row_count": matched,
+                        "selection": "exact_global_top_n",
+                    },
+                },
+                "rows": rows,
+                "complete": True,
+                "truncated": False,
+                "matched_row_count": matched,
+                "calculation_method": "full_scope_group_order_limit",
+            }
+        if any(not item.complete or item.truncated for item in dependencies):
+            raise ValueError("global ranking refuses incomplete or truncated input")
+        rows = _rows(arguments, dependencies)
+        metric = metric or _numeric_column(rows)
+        ranked = sorted(rows, key=lambda row: float(row.get(metric, 0)), reverse=True)
         return {
-            "summary": {"claim": f"已按 {metric} 识别前 {min(top_n, len(ranked))} 个贡献项"},
+            "summary": {
+                "claim": f"已按完整输入中的 {metric} 识别前 {min(top_n, len(ranked))} 个贡献项"
+            },
             "rows": ranked[:top_n],
+            "complete": True,
+            "matched_row_count": len(ranked),
+            "calculation_method": "complete_input_order_limit",
         }
 
     def _growth(self, arguments: dict[str, Any], dependencies: list[ToolResult]) -> dict[str, Any]:
@@ -281,7 +977,7 @@ class ToolRegistry:
             values = _numeric_values(dependencies[0].rows)
         else:
             request = QueryRequest.model_validate({**arguments, "dimensions": ["time"]})
-            result = self.data_service.query(request)
+            result = self.data_service.query(request, _ACCESS_CONTEXT.get())
             values = [float(row[request.metric]) for row in result["rows"]]
         if not values:
             raise ValueError("trend requires at least one value")
@@ -370,7 +1066,8 @@ class ToolRegistry:
                 target_date=arguments["target_date"],
                 scheme_id=int(arguments.get("scheme_id", 1)),
                 limit=int(arguments.get("limit", 1000)),
-            )
+            ),
+            _ACCESS_CONTEXT.get(),
         )
         return {
             "summary": {
@@ -407,7 +1104,7 @@ class ToolRegistry:
         }
 
     def _similar_days(self, arguments: dict[str, Any], _: list[ToolResult]) -> dict[str, Any]:
-        dates = self.data_service.catalog()["available_dates"]
+        dates = self.data_service.catalog(_ACCESS_CONTEXT.get())["available_dates"]
         return {
             "summary": {"claim": f"合成数据中找到 {len(dates)} 个可用历史活动参考日"},
             "rows": [
@@ -496,6 +1193,101 @@ class ToolRegistry:
             },
             "rows": rows,
             "warnings": ["活动修正系数为架构验证规则，尚未经过真实活动回测"],
+        }
+
+    def _event_forecast_readiness(
+        self, arguments: dict[str, Any], dependencies: list[ToolResult]
+    ) -> dict[str, Any]:
+        attendance = int(arguments.get("attendance", 0))
+        if not 0 <= attendance <= 200_000:
+            raise ValueError("attendance must be between 0 and 200000")
+        venue = str(arguments.get("venue") or "未提供场馆")
+        target_date = str(arguments.get("target_date") or "未提供活动日期")
+        actual_context_available = bool(
+            dependencies
+            and dependencies[0].status == "success"
+            and dependencies[0].complete
+            and not dependencies[0].truncated
+        )
+        requirements = [
+            ("event_time", "补充活动日期、开演时间、散场时间和预测时间窗"),
+            ("venue_station_mapping", f"由业务负责人核验 {venue} 到真实车站编码的映射"),
+            ("similar_event_actuals", "提供相似活动客流实绩、实际到场人数和进散场曲线"),
+            ("approved_forecast_model", "登记并审批预测模型版本、回测指标和不确定性口径"),
+            ("approved_operating_sop", "接入经审批的一站一方案、运力和容量约束后再给出处置建议"),
+        ]
+        return {
+            "summary": {
+                "claim": (
+                    f"已收到 {venue}、{attendance} 人的活动预测请求；当前仅有完整实际客流上下文，"
+                    "活动预测数据产品和模型尚未准入，因此未生成数值预测或运营处置方案"
+                ),
+                "method": "forecast_admission_readiness_check",
+                "forecast_status": "not_admitted",
+                "requested_target_date": target_date,
+                "actual_context_available": actual_context_available,
+                "numeric_forecast_generated": False,
+                "provenance": {
+                    "dataset_role": "actual",
+                    "forecast_status": "not_admitted",
+                    "quality_status": "warning",
+                },
+            },
+            "rows": [
+                {
+                    "requirement": requirement,
+                    "status": "missing_or_unverified",
+                    "action": action,
+                }
+                for requirement, action in requirements
+            ],
+            "warnings": [
+                "可用实际客流窗口不是该活动的预测基线",
+                "没有使用合成活动系数、未核验预测表或模型猜测生成数值",
+                "所有运营建议仍需业务负责人确认",
+            ],
+            "complete": True,
+            "matched_row_count": len(requirements),
+            "calculation_method": "forecast_admission_readiness_check",
+        }
+
+    def _task_readiness(self, arguments: dict[str, Any], _: list[ToolResult]) -> dict[str, Any]:
+        task_type = str(arguments.get("task_type") or "unknown")
+        requirements_by_task = {
+            "alert": ["实时密度权威源", "经审批阈值", "值班处置 SOP"],
+            "correlation": ["同期运营指标", "时间对齐规则", "统计分析验收"],
+            "diagnosis": ["行车与设备事件", "日历和活动数据", "原因证据判定规则"],
+            "geo": ["经核验站点坐标", "OD 权威源", "地图数据使用审批"],
+            "report": ["报告模板", "导出权限", "审批和留存策略"],
+            "transfer": ["轨道交易明细", "公交交易明细", "隐私审批和匹配规则"],
+            "trend": ["足够长的连续历史窗口", "趋势模型回测", "模型版本登记"],
+        }
+        requirements = requirements_by_task.get(
+            task_type,
+            ["该任务对应的权威数据产品", "确定性计算工具", "业务验收规则"],
+        )
+        return {
+            "summary": {
+                "claim": (
+                    f"当前真实数据产品未准入 {task_type} 任务所需的全部证据；"
+                    "本次未执行合成计算，也未生成运营结论"
+                ),
+                "method": "capability_admission_readiness_check",
+                "task_status": "not_admitted",
+                "provenance": {"quality_status": "warning"},
+            },
+            "rows": [
+                {
+                    "requirement": requirement,
+                    "status": "missing_or_unverified",
+                    "action": f"接入并审批：{requirement}",
+                }
+                for requirement in requirements
+            ],
+            "warnings": ["能力准入检查不是业务分析结论"],
+            "complete": True,
+            "matched_row_count": len(requirements),
+            "calculation_method": "capability_admission_readiness_check",
         }
 
     def _evaluate_forecast(self, arguments: dict[str, Any], _: list[ToolResult]) -> dict[str, Any]:
@@ -678,6 +1470,10 @@ class ToolRegistry:
         }
 
     def _report(self, arguments: dict[str, Any], dependencies: list[ToolResult]) -> dict[str, Any]:
+        context = _ACCESS_CONTEXT.get()
+        if context is None:
+            context = AccessContext.synthetic_local()
+        AuthorizationService.authorize_export(context)
         if dependencies:
             source = dependencies
         else:
@@ -694,7 +1490,7 @@ class ToolRegistry:
         payload = {
             "report_id": report_id,
             "generated_at": datetime.now().astimezone().isoformat(),
-            "data_scope": "synthetic",
+            "data_scope": self.data_service.data_scope,
             "sections": [result.model_dump(mode="json") for result in source],
         }
         temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
@@ -706,8 +1502,11 @@ class ToolRegistry:
         finally:
             temporary.unlink(missing_ok=True)
         return {
-            "summary": {"claim": "已生成并保存合成数据分析报告"},
-            "rows": [{"report_id": report_id, "data_scope": "synthetic"}],
+            "summary": {
+                "claim": "已生成并保存受控数据分析报告",
+                "provenance": {"data_scope": self.data_service.data_scope},
+            },
+            "rows": [{"report_id": report_id, "data_scope": self.data_service.data_scope}],
             "artifact_refs": [str(target)],
         }
 
@@ -725,6 +1524,66 @@ class ToolRegistry:
         return target
 
 
+def _assistant_capability_registry() -> dict[str, Any]:
+    path = Path(__file__).resolve().parents[3] / "config" / "assistant_capabilities.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("schema_version") != "1.0" or not isinstance(payload.get("capabilities"), list):
+        raise ValueError("assistant capability registry is invalid")
+    return payload
+
+
+def _travel_route_registry() -> dict[str, Any]:
+    path = Path(__file__).resolve().parents[3] / "config" / "travel_routes.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("schema_version") != "1.0" or not isinstance(payload.get("routes"), list):
+        raise ValueError("travel route registry is invalid")
+    return payload
+
+
+def _normalize_place(value: str) -> str:
+    return "".join(character.lower() for character in value if character.isalnum())
+
+
+def _place_matches(value: str, registered: dict[str, Any]) -> bool:
+    normalized = _normalize_place(value)
+    aliases = [registered.get("name"), *registered.get("aliases", [])]
+    candidates = [_normalize_place(str(alias)) for alias in aliases if alias]
+    return any(
+        normalized == candidate
+        or (len(normalized) >= 3 and normalized in candidate)
+        or (len(candidate) >= 3 and candidate in normalized)
+        for candidate in candidates
+    )
+
+
+def _navigation_links(
+    origin: str, destination: str, city: str, requested_mode: str
+) -> list[dict[str, str]]:
+    modes = [requested_mode]
+    if requested_mode == "public_transit":
+        modes.append("driving")
+    api_modes = {
+        "public_transit": ("transit", "百度地图实时公交导航"),
+        "driving": ("driving", "百度地图实时驾车导航"),
+        "walking": ("walking", "百度地图实时步行导航"),
+    }
+    links = []
+    for mode in modes:
+        api_mode, label = api_modes[mode]
+        query = urlencode(
+            {
+                "origin": origin,
+                "destination": destination,
+                "mode": api_mode,
+                "region": city,
+                "output": "html",
+                "src": "metro-passenger-flow-agent",
+            }
+        )
+        links.append({"label": label, "url": f"https://api.map.baidu.com/direction?{query}"})
+    return links
+
+
 def _rows(arguments: dict[str, Any], dependencies: list[ToolResult]) -> list[dict[str, Any]]:
     if isinstance(arguments.get("rows"), list):
         return arguments["rows"]
@@ -732,6 +1591,67 @@ def _rows(arguments: dict[str, Any], dependencies: list[ToolResult]) -> list[dic
         if dependency.rows:
             return dependency.rows
     raise ValueError("tool requires rows from arguments or a dependency")
+
+
+def _hash_payload(payload: dict[str, Any]) -> str:
+    canonical = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _coverage_for(
+    *,
+    tool: str,
+    arguments: dict[str, Any],
+    summary: dict[str, Any],
+    rows: list[dict[str, Any]],
+    matched: int | None,
+    complete: bool,
+    truncated: bool,
+) -> dict[str, Any]:
+    """Normalize every deterministic result into a machine-checkable coverage claim."""
+
+    provenance = summary.get("provenance") or {}
+    query_ir = summary.get("query_ir") or arguments.get("query") or arguments
+    time_range = query_ir.get("time_range", {}) if isinstance(query_ir, dict) else {}
+    derived = any(
+        marker in tool
+        for marker in (
+            "calculate_",
+            "compare_",
+            "rank_",
+            "detect_",
+            "decompose_",
+            "forecast",
+            "diagnose_",
+            "build_",
+        )
+    )
+    readiness = tool.startswith("assess_")
+    role = provenance.get("dataset_role")
+    if role not in {"actual", "reference", "forecast"}:
+        role = query_ir.get("dataset_role") if isinstance(query_ir, dict) else None
+    if role not in {"actual", "reference", "forecast"}:
+        role = None
+    return {
+        "coverage_type": (
+            "capability_readiness" if readiness else "derived_result" if derived else "query_result"
+        ),
+        "scope_label": str(summary.get("scope") or "requested_query_scope"),
+        "authoritative_master": bool(summary.get("authoritative_master", False)),
+        "time_range": time_range if isinstance(time_range, dict) else {},
+        "returned_count": len(rows),
+        "matched_count": matched,
+        "complete": complete,
+        "truncated": truncated,
+        "city": provenance.get("city")
+        or (query_ir.get("city") if isinstance(query_ir, dict) else None),
+        "dataset_role": role,
+        "source_version": provenance.get("source_version")
+        or (query_ir.get("source_version") if isinstance(query_ir, dict) else None),
+        "freshness_status": provenance.get("freshness_status"),
+    }
 
 
 def _numeric_column(rows: list[dict[str, Any]]) -> str:

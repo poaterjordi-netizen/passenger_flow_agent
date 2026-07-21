@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Production promotion gate configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "gate_id", "status", "owners", "thresholds", "required_artifacts", "promotion_rule"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "gate_id": {"type": "string", "minLength": 1},
+    "status": {"enum": ["blocked_pending_approval", "approved"]},
+    "owners": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["business_owner", "data_owner", "security_owner", "engineering_owner"],
+      "properties": {
+        "business_owner": {"type": ["string", "null"]},
+        "data_owner": {"type": ["string", "null"]},
+        "security_owner": {"type": ["string", "null"]},
+        "engineering_owner": {"type": ["string", "null"]}
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "business_correctness_min", "permission_leakage_max", "city_or_version_drift_max",
+        "blocked_quality_execution_max", "truncation_misstatement_max",
+        "unsupported_number_rate_max", "deterministic_baseline_regression_max",
+        "query_timeout_seconds_max", "query_cost_budget_max", "database_timeout_retry_policy"
+      ],
+      "properties": {
+        "business_correctness_min": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "permission_leakage_max": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "city_or_version_drift_max": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "blocked_quality_execution_max": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "truncation_misstatement_max": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "unsupported_number_rate_max": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "deterministic_baseline_regression_max": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "query_timeout_seconds_max": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "query_cost_budget_max": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "database_timeout_retry_policy": {"const": "no_automatic_retry"}
+      }
+    },
+    "required_artifacts": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "approval_ref"],
+        "properties": {
+          "status": {"enum": ["pending", "approved", "rejected"]},
+          "approval_ref": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "promotion_rule": {"type": "string", "minLength": 1}
+  }
+}

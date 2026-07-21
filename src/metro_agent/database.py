@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
+import inspect
 import json
 import os
 import re
@@ -17,6 +19,7 @@ _MAX_STATION_FLOW_ROWS = 50_000
 _MAX_OD_FLOW_ROWS = 200_000
 _MAX_FILTER_VALUES = 100
 _QUERY_CAPABILITY = object()
+STATION_FLOW_MAPPING_VERSION = "station-flow-day-adapter-v1"
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,7 @@ class DatabaseSettings:
     read_timeout: int = 30
     ssl_ca: str | None = None
     allow_insecure_tls: bool = False
+    tls_cert_sha256: str | None = None
 
     @classmethod
     def from_env(cls, environment: Mapping[str, str] | None = None) -> DatabaseSettings:
@@ -64,6 +68,9 @@ class DatabaseSettings:
         insecure_tls_value = env.get("METRO_DB_ALLOW_INSECURE_TLS", "false").strip().lower()
         if insecure_tls_value not in {"true", "false"}:
             raise ValueError("METRO_DB_ALLOW_INSECURE_TLS must be true or false")
+        certificate_pin = env.get("METRO_DB_TLS_CERT_SHA256", "").strip().lower() or None
+        if certificate_pin is not None and not re.fullmatch(r"[0-9a-f]{64}", certificate_pin):
+            raise ValueError("METRO_DB_TLS_CERT_SHA256 must be a lowercase SHA-256 digest")
         return cls(
             host=required["METRO_DB_HOST"],
             port=port,
@@ -74,19 +81,21 @@ class DatabaseSettings:
             read_timeout=read_timeout,
             ssl_ca=env.get("METRO_DB_SSL_CA") or None,
             allow_insecure_tls=insecure_tls_value == "true",
+            tls_cert_sha256=certificate_pin,
         )
 
     def connection_kwargs(self) -> dict[str, Any]:
         if self.ssl_ca:
-            ssl: dict[str, Any] = {"ca": self.ssl_ca, "check_hostname": True}
-            verify_cert = True
-            verify_identity = True
+            hostname_verification = self.tls_cert_sha256 is None
+            ssl: dict[str, Any] = {
+                "ca": self.ssl_ca,
+                "check_hostname": hostname_verification,
+                "verify_mode": True,
+            }
         elif self.allow_insecure_tls:
             # Explicit non-production escape hatch. Encryption is required below,
             # but the server identity is not verified in this mode.
             ssl = {"check_hostname": False}
-            verify_cert = False
-            verify_identity = False
         else:
             raise ValueError(
                 "METRO_DB_SSL_CA is required for verified TLS; "
@@ -105,9 +114,15 @@ class DatabaseSettings:
             "autocommit": False,
             "cursorclass": pymysql.cursors.DictCursor,
             "ssl": ssl,
-            "ssl_verify_cert": verify_cert,
-            "ssl_verify_identity": verify_identity,
         }
+
+    @property
+    def tls_identity_mode(self) -> str:
+        if self.ssl_ca and self.tls_cert_sha256:
+            return "ca_and_certificate_pin"
+        if self.ssl_ca:
+            return "ca_and_hostname"
+        return "encryption_only_unverified"
 
 
 @dataclass(frozen=True)
@@ -127,6 +142,7 @@ class DatabaseQueryResult:
     parameter_count: int
     tls_cipher: str
     truncated: bool
+    tls_identity_mode: str = "unknown"
 
     @property
     def row_count(self) -> int:
@@ -170,6 +186,8 @@ def compile_station_flow_query(
     *,
     station_ids: Sequence[str] | None = None,
     line_ids: Sequence[str] | None = None,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
     limit: int = 5_000,
 ) -> _DatabaseQuery:
     if not isinstance(service_date, date) or isinstance(service_date, datetime):
@@ -179,16 +197,40 @@ def compile_station_flow_query(
     row_limit = _validated_limit(limit, _MAX_STATION_FLOW_ROWS)
     predicates = ["Date = %s"]
     parameters: list[Any] = [service_date]
+    if (start_time is None) != (end_time is None):
+        raise ValueError("start_time and end_time must be supplied together")
+    if start_time is not None and end_time is not None:
+        if start_time.utcoffset() is not None or end_time.utcoffset() is not None:
+            raise ValueError("station time range must use naive local datetimes")
+        if start_time >= end_time:
+            raise ValueError("station time range must contain datetimes with start before end")
+        predicates.extend(["StartTime >= %s", "StartTime < %s"])
+        parameters.extend([start_time, end_time])
     _add_in_filter(predicates, parameters, "StationID", station_values)
     _add_in_filter(predicates, parameters, "LineID", line_values)
     sql = (
-        "SELECT StationID, StationName, LineName, StartTime, EndTime, InFlow, OutFlow "
+        "SELECT StationID, StationName, LineID, LineName, StartTime, EndTime, InFlow, OutFlow "
         "FROM clear_stationflow_day "
         f"WHERE {' AND '.join(predicates)} "
         "ORDER BY StartTime, StationID, LineName LIMIT %s"
     )
     parameters.append(row_limit + 1)
     return _DatabaseQuery("station_flow_day", sql, tuple(parameters), row_limit, _QUERY_CAPABILITY)
+
+
+def station_flow_mapping_hash() -> str:
+    """Bind source registration to the executable fixed-query mapping implementation."""
+
+    payload = {
+        "mapping_version": STATION_FLOW_MAPPING_VERSION,
+        "compiler_source": inspect.getsource(compile_station_flow_query),
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def query_template_hash(sql_template: str) -> str:
+    return hashlib.sha256(sql_template.encode("utf-8")).hexdigest()
 
 
 def compile_od_flow_query(
@@ -242,6 +284,7 @@ class ReadOnlyMetroDatabase:
         connection = self._connector(**self.settings.connection_kwargs())
         primary_error = False
         try:
+            self._verify_peer_identity(connection)
             with connection.cursor() as cursor:
                 cursor.execute("SHOW SESSION STATUS LIKE 'Ssl_cipher'")
                 tls_row = cursor.fetchone()
@@ -265,12 +308,29 @@ class ReadOnlyMetroDatabase:
                 parameter_count=len(query.parameters),
                 tls_cipher=tls_cipher,
                 truncated=truncated,
+                tls_identity_mode=self.settings.tls_identity_mode,
             )
         except BaseException:
             primary_error = True
             raise
         finally:
             self._cleanup_connection(connection, suppress_errors=primary_error)
+
+    def _verify_peer_identity(self, connection: Any) -> None:
+        expected = self.settings.tls_cert_sha256
+        if expected is None:
+            return
+        socket = getattr(connection, "_sock", None)
+        getter = getattr(socket, "getpeercert", None)
+        try:
+            certificate = getter(binary_form=True) if getter else None
+        except (OSError, ValueError):
+            certificate = None
+        if not isinstance(certificate, bytes) or not certificate:
+            raise RuntimeError("database TLS peer certificate was unavailable for pin verification")
+        actual = hashlib.sha256(certificate).hexdigest()
+        if not hmac.compare_digest(actual, expected):
+            raise RuntimeError("database TLS peer certificate pin did not match")
 
     @staticmethod
     def _cleanup_connection(connection: Any, *, suppress_errors: bool) -> None:
@@ -307,12 +367,16 @@ class ReadOnlyMetroDatabase:
         *,
         station_ids: Sequence[str] | None = None,
         line_ids: Sequence[str] | None = None,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
         limit: int = 5_000,
     ) -> DatabaseQueryResult:
         query = compile_station_flow_query(
             service_date,
             station_ids=station_ids,
             line_ids=line_ids,
+            start_time=start_time,
+            end_time=end_time,
             limit=limit,
         )
         return self._execute(query)

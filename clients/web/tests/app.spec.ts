@@ -10,7 +10,10 @@ test("dashboard loads governed passenger flow data", async ({ page }) => {
     page.getByRole("heading", { name: "地铁客流运营总览" }),
   ).toBeVisible()
   await expect(page.getByText("进站客流")).toBeVisible()
-  await expect(page.getByText("Synthetic fixtures")).toBeVisible()
+  await expect(page.getByText("synthetic", { exact: true })).toBeVisible()
+  await expect(
+    page.getByText("Synthetic environment", { exact: true }),
+  ).toBeVisible()
   await expect(page.getByText("API 运行正常")).toBeVisible()
   expect(consoleErrors).toEqual([])
 })
@@ -20,8 +23,68 @@ test("bounded query returns an audited result", async ({ page }) => {
   await page.getByRole("button", { name: "受约束查询" }).click()
   await page.getByRole("button", { name: "执行安全查询" }).click()
   await expect(page.getByText("查询成功")).toBeVisible()
+  await expect(page.getByText("结果完整")).toBeVisible()
+  await expect(
+    page.getByText("local-synthetic-policy-v1", { exact: true }),
+  ).toBeVisible()
   await expect(page.getByText("已审计")).toBeVisible()
   await expect(page.locator("table")).toBeVisible()
+})
+
+test("system page renders backend governance, scope, and promotion state", async ({
+  page,
+}) => {
+  await page.goto("/")
+  await page.getByRole("button", { name: "系统状态" }).click()
+  await expect(page.getByText("实际生效的治理状态")).toBeVisible()
+  await expect(
+    page.getByText("Subject：local-synthetic-user", { exact: true }),
+  ).toBeVisible()
+  await expect(page.getByText("源版本：synthetic-v1")).toBeVisible()
+  await expect(page.getByText("注册质量：pass", { exact: false })).toBeVisible()
+  await expect(page.getByText("运行质量：pass", { exact: false })).toBeVisible()
+  await expect(
+    page.getByText("单主体静态令牌适配器", { exact: false }),
+  ).toBeVisible()
+  await expect(page.getByText("production-readonly-promotion-v1")).toBeVisible()
+  await expect(page.getByText("门禁状态尚未批准")).toBeVisible()
+  await page.getByText(/查看实际注册工具/).click()
+  await expect(page.getByText("query_metric", { exact: true })).toBeVisible()
+})
+
+test("assistant UI obeys a backend promotion block and does not create a session", async ({
+  page,
+}) => {
+  let sessionRequests = 0
+  page.on("request", (request) => {
+    if (request.url().endsWith("/api/v1/assistant/sessions"))
+      sessionRequests += 1
+  })
+  await page.route("**/api/v1/governance/status", async (route) => {
+    const response = await route.fetch()
+    const payload = await response.json()
+    payload.data_scope = "production-shadow"
+    payload.assistant_enabled = false
+    payload.assistant_status = "blocked_by_promotion_gate"
+    payload.promotion.enforced = true
+    await route.fulfill({ response, json: payload })
+  })
+  await page.goto("/")
+  await expect(
+    page.getByText("Real MySQL · Local shadow", { exact: true }),
+  ).toBeVisible()
+  await page.getByRole("button", { name: "智能分析" }).click()
+  await expect(
+    page.getByText("大型活动问题会调用真实客流上下文", { exact: false }),
+  ).toBeVisible()
+  await expect(page.getByText("Promotion 门禁未通过").first()).toBeVisible()
+  await expect(
+    page.getByRole("button", { name: "治理门禁已阻断" }),
+  ).toBeDisabled()
+  await expect(
+    page.getByRole("textbox", { name: "自然语言任务" }),
+  ).toBeDisabled()
+  expect(sessionRequests).toBe(0)
 })
 
 test("forecast is explicitly labelled as a baseline", async ({ page }) => {
@@ -66,6 +129,7 @@ test("assistant shows a verified plan, evidence, and trajectory", async ({
   await expect(page.locator("table.data-table")).toBeVisible()
   await expect(page.getByText("RESPOND", { exact: true })).toBeVisible()
   await expect(page.getByText("未配置真实模型")).toBeVisible()
+  await expect(page.getByText("无模型调用")).toBeVisible()
   await expect(page.getByText("确定性 verifier 已通过")).toBeVisible()
   expect(consoleErrors).toEqual([])
 })
@@ -108,6 +172,23 @@ test("assistant distinguishes configured models from actual calls and reports us
       total_tokens: 390,
       elapsed_seconds: 1.25,
     }
+    payload.model_egress = [
+      {
+        call_id: "model-call-test",
+        purpose: "synthesis",
+        decision: "approved",
+        endpoint_policy_id: "test-policy",
+        provider: "openai-compatible:test-model",
+        model: "test-model",
+        endpoint_target_hash: "a".repeat(64),
+        endpoint_binding_verified: true,
+        exact_payload_hash: "b".repeat(64),
+        outbound_field_paths: ["evidence.facts", "question"],
+        started_at: "2026-07-21T00:00:00Z",
+        completed_at: "2026-07-21T00:00:01Z",
+        status: "succeeded",
+      },
+    ]
     await route.fulfill({ response, json: payload })
   })
   await page.goto("/")
@@ -120,6 +201,39 @@ test("assistant distinguishes configured models from actual calls and reports us
   await expect(page.getByText("3 次实际 API 调用")).toBeVisible()
   await expect(page.getByText("390 tokens · 1.25s")).toBeVisible()
   await expect(page.getByText("输入 300 · 输出 90 · 推理 30")).toBeVisible()
+  await expect(page.getByText("1 次 · 1 次批准")).toBeVisible()
+  await page.getByText("调用级模型出域审计（1）").click()
+  await expect(page.getByText("synthesis · approved · succeeded")).toBeVisible()
+  await expect(page.getByText("端点绑定：已核验")).toBeVisible()
+})
+
+test("forecast renders only metrics returned by the authorized response", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/forecasts/designated-day", async (route) => {
+    const response = await route.fetch()
+    const payload = await response.json()
+    payload.rows = payload.rows.map(
+      ({
+        entries: _entries,
+        transfers: _transfers,
+        ...row
+      }: Record<string, unknown>) => row,
+    )
+    await route.fulfill({ response, json: payload })
+  })
+  await page.goto("/")
+  await page.getByRole("button", { name: "基线预测" }).click()
+  await page.getByRole("button", { name: "生成预测预览" }).click()
+  await expect(
+    page.getByRole("columnheader", { name: "出站客流" }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("columnheader", { name: "进站客流" }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByRole("columnheader", { name: "换乘客流" }),
+  ).toHaveCount(0)
 })
 
 test("assistant keeps the form usable when capability discovery fails", async ({
@@ -233,10 +347,27 @@ test("assistant remains usable without horizontal overflow on mobile", async ({
   await page.getByRole("button", { name: "智能分析" }).click()
   await page.getByRole("button", { name: "开始智能分析" }).click()
   await expect(page.getByText("Evidence verified")).toBeVisible()
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - window.innerWidth,
-  )
-  expect(overflow).toBeLessThanOrEqual(0)
+  const regularLayout = await page.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth - window.innerWidth,
+    outliers: [...document.querySelectorAll("body *")]
+      .map((element) => {
+        const rect = element.getBoundingClientRect()
+        return {
+          tag: element.tagName,
+          text: element.textContent?.trim().slice(0, 80) ?? "",
+          right: Math.round(rect.right),
+          width: Math.round(rect.width),
+        }
+      })
+      .filter(
+        (element) => element.width > 0 && element.right > window.innerWidth + 1,
+      )
+      .slice(0, 10),
+  }))
+  expect(
+    regularLayout.overflow,
+    JSON.stringify(regularLayout.outliers),
+  ).toBeLessThanOrEqual(0)
   await page.setViewportSize({ width: 320, height: 568 })
   const narrowLayout = await page.evaluate(() => ({
     overflow: document.documentElement.scrollWidth - window.innerWidth,

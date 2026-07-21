@@ -16,6 +16,52 @@ TaskType = Literal[
     "diagnosis",
     "trend",
     "report",
+    "travel",
+    "help",
+    "general",
+]
+OperationName = Literal[
+    "list_entities",
+    "describe_entity",
+    "list_metrics",
+    "list_available_dates",
+    "summarize_dataset",
+    "query_metric",
+    "rank_entities",
+    "compare_periods",
+    "forecast",
+    "alert",
+    "transfer",
+    "geo",
+    "correlation",
+    "diagnosis",
+    "trend_analysis",
+    "report",
+    "capability_readiness",
+    "travel_plan",
+    "capability_help",
+    "general_answer",
+]
+EntityType = Literal["station", "line", "direction", "date", "metric"]
+AnswerPolicy = Literal[
+    "deterministic_table",
+    "deterministic_summary",
+    "llm_synthesis",
+    "llm_general",
+]
+CompletenessPolicy = Literal["require_complete", "reject_if_truncated"]
+FailureCategory = Literal[
+    "material_ambiguity",
+    "intent_unrecognized",
+    "entity_not_found",
+    "capability_gap",
+    "query_ir_unsupported",
+    "data_unavailable",
+    "result_truncated",
+    "tool_failure",
+    "model_failure",
+    "verification_failure",
+    "authorization_failure",
 ]
 
 
@@ -46,6 +92,14 @@ class TransferAnalysisSpec(StrictModel):
     output_dimensions: list[str] = Field(default_factory=lambda: ["station"])
 
 
+class TravelPlanSpec(StrictModel):
+    origin: str | None = Field(default=None, max_length=200)
+    destination: str | None = Field(default=None, max_length=200)
+    city: str | None = Field(default=None, max_length=100)
+    mode: Literal["public_transit", "driving", "walking"] = "public_transit"
+    departure_time: str | None = Field(default=None, max_length=100)
+
+
 class ActionPlan(StrictModel):
     severity: Literal["normal", "warning", "critical"]
     actions: list[str] = Field(default_factory=list)
@@ -53,16 +107,96 @@ class ActionPlan(StrictModel):
     requires_human_confirmation: bool = True
 
 
+class OperationIR(StrictModel):
+    schema_version: Literal["1.0"] = "1.0"
+    operation: OperationName
+    entity_type: EntityType | None = None
+    metric: str | None = None
+    scope: Literal[
+        "approved_observation_window",
+        "registered_catalog",
+        "authoritative_master",
+        "requested_query_scope",
+        "external_navigation",
+        "general_knowledge",
+    ] = "requested_query_scope"
+    time_range: dict[str, str] = Field(default_factory=dict)
+    filters: list[dict[str, Any]] = Field(default_factory=list)
+    completeness_required: bool = True
+    answer_policy: AnswerPolicy = "llm_synthesis"
+    target_query: str | None = None
+    origin: str | None = None
+    destination: str | None = None
+    travel_mode: Literal["public_transit", "driving", "walking"] | None = None
+    departure_time: str | None = None
+    route_confidence: Literal["high", "model_candidate"] = "high"
+
+
+class CapabilityDefinition(StrictModel):
+    id: str = Field(min_length=1)
+    operations: list[OperationName] = Field(min_length=1)
+    tools: list[str] = Field(min_length=1)
+    entity_types: list[EntityType] = Field(default_factory=list)
+    data_scopes: list[Literal["synthetic", "production-shadow", "production-readonly"]] = Field(
+        min_length=1
+    )
+    required_slots: list[str] = Field(default_factory=list)
+    optional_slots: list[str] = Field(default_factory=list)
+    completeness_policy: CompletenessPolicy
+    answer_policy: AnswerPolicy
+
+
+class CapabilityMatch(StrictModel):
+    status: Literal["matched", "missing_slots", "unavailable"]
+    capability_id: str | None = None
+    registry_version: str
+    tools: list[str] = Field(default_factory=list)
+    answer_policy: AnswerPolicy
+    completeness_policy: CompletenessPolicy = "require_complete"
+    missing_slots: list[str] = Field(default_factory=list)
+    unavailable_tools: list[str] = Field(default_factory=list)
+
+
+class CoverageEvidence(StrictModel):
+    coverage_type: Literal[
+        "unknown",
+        "observed_window",
+        "registered_catalog",
+        "query_result",
+        "derived_result",
+        "capability_readiness",
+        "external_navigation",
+        "general_context",
+    ] = "unknown"
+    scope_label: str = "unknown"
+    authoritative_master: bool = False
+    time_range: dict[str, str] = Field(default_factory=dict)
+    returned_count: int = Field(default=0, ge=0)
+    matched_count: int | None = Field(default=None, ge=0)
+    complete: bool = False
+    truncated: bool = False
+    city: str | None = None
+    dataset_role: Literal["actual", "reference", "forecast"] | None = None
+    source_version: str | None = None
+    freshness_status: str | None = None
+
+
 class IntentEnvelope(StrictModel):
     task_type: TaskType
     user_goal: str = Field(min_length=1)
     entities: EntitySet = Field(default_factory=EntitySet)
     metrics: list[str] = Field(default_factory=list)
+    metric_version: str = "1.0.0"
+    city: str | None = None
+    dataset_role: Literal["actual", "reference", "forecast"] = "actual"
+    source_version: str | None = None
+    time_grain: Literal["source", "10m", "15m", "30m", "hour", "day"] = "source"
     time_scope: dict[str, Any] = Field(default_factory=dict)
     ambiguities: list[str] = Field(default_factory=list)
     needs_clarification: bool = False
     event_spec: EventSpec | None = None
     transfer_spec: TransferAnalysisSpec | None = None
+    travel_spec: TravelPlanSpec | None = None
 
 
 class ToolStep(StrictModel):
@@ -102,6 +236,36 @@ class ToolResult(StrictModel):
     artifact_refs: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     error_code: str | None = None
+    returned_row_count: int = Field(default=0, ge=0)
+    matched_row_count: int | None = Field(default=None, ge=0)
+    matched_count_unknown: bool = False
+    complete: bool = True
+    truncated: bool = False
+    query_fingerprint: str | None = None
+    logical_plan_hash: str | None = None
+    result_hash: str | None = None
+    source_step_ids: list[str] = Field(default_factory=list)
+    calculation_method: str | None = None
+    policy_snapshot_id: str | None = None
+    access_scope_hash: str | None = None
+    block_reason: str | None = None
+    coverage: CoverageEvidence = Field(default_factory=CoverageEvidence)
+
+
+class StructuredClaim(StrictModel):
+    claim_type: Literal["metric_total", "result_row"]
+    metric_id: str | None = None
+    metric_version: str | None = None
+    unit: str | None = None
+    aggregation: str | None = None
+    value: int | float | None = None
+    dimensions: dict[str, Any] = Field(default_factory=dict)
+    values: dict[str, int | float] = Field(default_factory=dict)
+
+
+class ResultFieldSpec(StrictModel):
+    field: str = Field(min_length=1)
+    type: Literal["boolean", "integer", "number", "null", "string"]
 
 
 class EvidenceItem(StrictModel):
@@ -110,9 +274,28 @@ class EvidenceItem(StrictModel):
     kind: Literal["fact", "statistic", "chart", "model_output", "knowledge"]
     claim: str
     value: Any = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    structured_claims: list[StructuredClaim] = Field(default_factory=list)
+    result_schema: list[ResultFieldSpec] = Field(default_factory=list)
+    returned_row_count: int = Field(default=0, ge=0)
+    matched_row_count: int | None = Field(default=None, ge=0)
+    matched_count_unknown: bool = False
+    complete: bool = True
+    truncated: bool = False
+    query_fingerprint: str | None = None
+    logical_plan_hash: str | None = None
+    result_hash: str | None = None
+    source_evidence_ids: list[str] = Field(default_factory=list)
+    calculation_method: str | None = None
+    policy_snapshot_id: str | None = None
+    access_scope_hash: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+    block_reason: str | None = None
+    coverage: CoverageEvidence = Field(default_factory=CoverageEvidence)
 
 
 class EvidencePacket(StrictModel):
+    schema_version: Literal["2.0"] = "2.0"
     question: str
     facts: list[EvidenceItem] = Field(default_factory=list)
     statistics: list[EvidenceItem] = Field(default_factory=list)
@@ -219,7 +402,7 @@ class ValidationMilestone(StrictModel):
 
 class AssistantCapabilities(StrictModel):
     implementation_status: Literal["local_governed_prototype"]
-    data_scope: Literal["synthetic"]
+    data_scope: Literal["synthetic", "production-shadow", "production-readonly"]
     active_runtime: ModelRuntime
     architecture: list[AssistantArchitectureStage]
     model_responsibilities: list[str]
@@ -227,12 +410,34 @@ class AssistantCapabilities(StrictModel):
     prohibited_model_actions: list[str]
     validated_milestones: list[ValidationMilestone]
     production_gaps: list[str]
+    capability_registry_version: str
+    operation_capabilities: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class SessionRecord(StrictModel):
     session_id: str
     created_at: str
+    owner_subject_id: str
+    owner_tenant_or_department: str
+    access_scope_hash: str
+    policy_snapshot_id: str
     messages: list[dict[str, str]] = Field(default_factory=list)
+
+
+class ModelEgressRecord(StrictModel):
+    call_id: str
+    purpose: Literal["intent_candidate", "synthesis"]
+    decision: Literal["denied", "approved"]
+    endpoint_policy_id: str
+    provider: str
+    model: str | None = None
+    endpoint_target_hash: str
+    endpoint_binding_verified: bool
+    exact_payload_hash: str
+    outbound_field_paths: list[str] = Field(default_factory=list)
+    started_at: str
+    completed_at: str | None = None
+    status: Literal["started", "succeeded", "failed", "not_called"]
 
 
 class RunRecord(StrictModel):
@@ -241,10 +446,20 @@ class RunRecord(StrictModel):
     created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     status: Literal["running", "completed", "needs_clarification", "failed"] = "running"
     provider: str
+    owner_subject_id: str
+    owner_tenant_or_department: str
+    access_scope_hash: str
+    policy_snapshot_id: str
+    intent_route: Literal["deterministic", "model_candidate", "clarification"] = "deterministic"
+    planner_route: Literal["deterministic"] = "deterministic"
+    model_egress: list[ModelEgressRecord] = Field(default_factory=list)
     model_runtime: ModelRuntime = Field(default_factory=ModelRuntime)
     original_question: str
     selected_context: dict[str, Any] = Field(default_factory=dict)
     intent: IntentEnvelope | None = None
+    operation_ir: OperationIR | None = None
+    capability_match: CapabilityMatch | None = None
+    failure_category: FailureCategory | None = None
     plan: TaskPlan | None = None
     replans: list[TaskPlan] = Field(default_factory=list)
     tool_results: list[ToolResult] = Field(default_factory=list)

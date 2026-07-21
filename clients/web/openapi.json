@@ -48,8 +48,16 @@
             "title": "Architecture",
             "type": "array"
           },
+          "capability_registry_version": {
+            "title": "Capability Registry Version",
+            "type": "string"
+          },
           "data_scope": {
-            "const": "synthetic",
+            "enum": [
+              "synthetic",
+              "production-shadow",
+              "production-readonly"
+            ],
             "title": "Data Scope",
             "type": "string"
           },
@@ -70,6 +78,14 @@
               "type": "string"
             },
             "title": "Model Responsibilities",
+            "type": "array"
+          },
+          "operation_capabilities": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Operation Capabilities",
             "type": "array"
           },
           "production_gaps": {
@@ -103,7 +119,8 @@
           "deterministic_controls",
           "prohibited_model_actions",
           "validated_milestones",
-          "production_gaps"
+          "production_gaps",
+          "capability_registry_version"
         ],
         "title": "AssistantCapabilities",
         "type": "object"
@@ -232,6 +249,82 @@
         "title": "AuditSummary",
         "type": "object"
       },
+      "CapabilityMatch": {
+        "additionalProperties": false,
+        "properties": {
+          "answer_policy": {
+            "enum": [
+              "deterministic_table",
+              "deterministic_summary",
+              "llm_synthesis",
+              "llm_general"
+            ],
+            "title": "Answer Policy",
+            "type": "string"
+          },
+          "capability_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability Id"
+          },
+          "completeness_policy": {
+            "default": "require_complete",
+            "enum": [
+              "require_complete",
+              "reject_if_truncated"
+            ],
+            "title": "Completeness Policy",
+            "type": "string"
+          },
+          "missing_slots": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Slots",
+            "type": "array"
+          },
+          "registry_version": {
+            "title": "Registry Version",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "matched",
+              "missing_slots",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "unavailable_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unavailable Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "registry_version",
+          "answer_policy"
+        ],
+        "title": "CapabilityMatch",
+        "type": "object"
+      },
       "CatalogOption": {
         "additionalProperties": false,
         "properties": {
@@ -254,6 +347,17 @@
       "CatalogResponse": {
         "additionalProperties": false,
         "properties": {
+          "access_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Policy"
+          },
           "available_dates": {
             "items": {
               "format": "date",
@@ -262,8 +366,23 @@
             "title": "Available Dates",
             "type": "array"
           },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
           "data_scope": {
-            "const": "synthetic",
+            "enum": [
+              "synthetic",
+              "production-shadow",
+              "production-readonly"
+            ],
             "title": "Data Scope",
             "type": "string"
           },
@@ -284,6 +403,17 @@
             "title": "Directions",
             "type": "array"
           },
+          "freshness_status": {
+            "default": "unknown",
+            "enum": [
+              "fresh",
+              "stale",
+              "unknown",
+              "not_applicable"
+            ],
+            "title": "Freshness Status",
+            "type": "string"
+          },
           "lines": {
             "items": {
               "type": "string"
@@ -291,12 +421,133 @@
             "title": "Lines",
             "type": "array"
           },
+          "logical_registry_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logical Registry Hash"
+          },
+          "logical_registry_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logical Registry Version"
+          },
           "metrics": {
             "items": {
               "$ref": "#/components/schemas/MetricCatalogItem"
             },
             "title": "Metrics",
             "type": "array"
+          },
+          "physical_mapping_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Physical Mapping Hash"
+          },
+          "physical_mapping_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Physical Mapping Version"
+          },
+          "quality_gate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Gate"
+          },
+          "quality_gate_evaluated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Gate Evaluated At"
+          },
+          "quality_status": {
+            "default": "unknown",
+            "enum": [
+              "pass",
+              "warning",
+              "blocked",
+              "unknown"
+            ],
+            "title": "Quality Status",
+            "type": "string"
+          },
+          "registration_quality_status": {
+            "default": "unknown",
+            "enum": [
+              "pass",
+              "warning",
+              "blocked",
+              "unknown"
+            ],
+            "title": "Registration Quality Status",
+            "type": "string"
+          },
+          "registration_status": {
+            "default": "unknown",
+            "enum": [
+              "approved",
+              "candidate",
+              "blocked",
+              "unknown"
+            ],
+            "title": "Registration Status",
+            "type": "string"
+          },
+          "runtime_quality_status": {
+            "default": "unknown",
+            "enum": [
+              "pass",
+              "warning",
+              "blocked",
+              "unknown"
+            ],
+            "title": "Runtime Quality Status",
+            "type": "string"
+          },
+          "source_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version"
           },
           "stations": {
             "items": {
@@ -323,6 +574,149 @@
           "available_dates"
         ],
         "title": "CatalogResponse",
+        "type": "object"
+      },
+      "ComparisonPeriods": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline": {
+            "$ref": "#/components/schemas/TimeRange"
+          },
+          "comparison": {
+            "$ref": "#/components/schemas/TimeRange"
+          },
+          "relation": {
+            "default": "explicit",
+            "enum": [
+              "explicit",
+              "previous_period",
+              "year_over_year"
+            ],
+            "title": "Relation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "baseline",
+          "comparison"
+        ],
+        "title": "ComparisonPeriods",
+        "type": "object"
+      },
+      "CoverageEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "authoritative_master": {
+            "default": false,
+            "title": "Authoritative Master",
+            "type": "boolean"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "complete": {
+            "default": false,
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "coverage_type": {
+            "default": "unknown",
+            "enum": [
+              "unknown",
+              "observed_window",
+              "registered_catalog",
+              "query_result",
+              "derived_result",
+              "capability_readiness",
+              "external_navigation",
+              "general_context"
+            ],
+            "title": "Coverage Type",
+            "type": "string"
+          },
+          "dataset_role": {
+            "anyOf": [
+              {
+                "enum": [
+                  "actual",
+                  "reference",
+                  "forecast"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Role"
+          },
+          "freshness_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Status"
+          },
+          "matched_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Count"
+          },
+          "returned_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Returned Count",
+            "type": "integer"
+          },
+          "scope_label": {
+            "default": "unknown",
+            "title": "Scope Label",
+            "type": "string"
+          },
+          "source_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version"
+          },
+          "time_range": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Time Range",
+            "type": "object"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "title": "CoverageEvidence",
         "type": "object"
       },
       "DatasetEligibility": {
@@ -442,9 +836,50 @@
       "EvidenceItem": {
         "additionalProperties": false,
         "properties": {
+          "access_scope_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Scope Hash"
+          },
+          "block_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block Reason"
+          },
+          "calculation_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calculation Method"
+          },
           "claim": {
             "title": "Claim",
             "type": "string"
+          },
+          "complete": {
+            "default": true,
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/CoverageEvidence"
           },
           "evidence_id": {
             "title": "Evidence Id",
@@ -461,12 +896,117 @@
             "title": "Kind",
             "type": "string"
           },
+          "logical_plan_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logical Plan Hash"
+          },
+          "matched_count_unknown": {
+            "default": false,
+            "title": "Matched Count Unknown",
+            "type": "boolean"
+          },
+          "matched_row_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Row Count"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "policy_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Snapshot Id"
+          },
+          "query_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query Fingerprint"
+          },
+          "result_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Hash"
+          },
+          "result_schema": {
+            "items": {
+              "$ref": "#/components/schemas/ResultFieldSpec"
+            },
+            "title": "Result Schema",
+            "type": "array"
+          },
+          "returned_row_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Returned Row Count",
+            "type": "integer"
+          },
+          "source_evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Evidence Ids",
+            "type": "array"
+          },
           "step_id": {
             "title": "Step Id",
             "type": "string"
           },
+          "structured_claims": {
+            "items": {
+              "$ref": "#/components/schemas/StructuredClaim"
+            },
+            "title": "Structured Claims",
+            "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          },
           "value": {
             "title": "Value"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [
@@ -525,6 +1065,12 @@
           },
           "question": {
             "title": "Question",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "2.0",
+            "default": "2.0",
+            "title": "Schema Version",
             "type": "string"
           },
           "statistics": {
@@ -629,6 +1175,497 @@
         "title": "ForecastResponse",
         "type": "object"
       },
+      "GovernanceAccessScope": {
+        "additionalProperties": false,
+        "properties": {
+          "access_scope_hash": {
+            "title": "Access Scope Hash",
+            "type": "string"
+          },
+          "allowed_cities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Cities",
+            "type": "array"
+          },
+          "allowed_dataset_roles": {
+            "items": {
+              "enum": [
+                "actual",
+                "reference",
+                "forecast"
+              ],
+              "type": "string"
+            },
+            "title": "Allowed Dataset Roles",
+            "type": "array"
+          },
+          "allowed_metrics": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Metrics",
+            "type": "array"
+          },
+          "export_policy": {
+            "enum": [
+              "deny",
+              "controlled"
+            ],
+            "title": "Export Policy",
+            "type": "string"
+          },
+          "max_time_range_hours": {
+            "title": "Max Time Range Hours",
+            "type": "integer"
+          },
+          "policy_snapshot_id": {
+            "title": "Policy Snapshot Id",
+            "type": "string"
+          },
+          "row_limit": {
+            "title": "Row Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "allowed_cities",
+          "allowed_metrics",
+          "allowed_dataset_roles",
+          "max_time_range_hours",
+          "row_limit",
+          "export_policy",
+          "policy_snapshot_id",
+          "access_scope_hash"
+        ],
+        "title": "GovernanceAccessScope",
+        "type": "object"
+      },
+      "GovernanceDataSource": {
+        "additionalProperties": false,
+        "properties": {
+          "access_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Policy"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "freshness_status": {
+            "enum": [
+              "fresh",
+              "stale",
+              "unknown",
+              "not_applicable"
+            ],
+            "title": "Freshness Status",
+            "type": "string"
+          },
+          "logical_registry_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logical Registry Hash"
+          },
+          "logical_registry_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logical Registry Version"
+          },
+          "physical_mapping_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Physical Mapping Hash"
+          },
+          "physical_mapping_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Physical Mapping Version"
+          },
+          "quality_gate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Gate"
+          },
+          "quality_gate_evaluated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Gate Evaluated At"
+          },
+          "quality_status": {
+            "enum": [
+              "pass",
+              "warning",
+              "blocked",
+              "unknown"
+            ],
+            "title": "Quality Status",
+            "type": "string"
+          },
+          "registration_quality_status": {
+            "enum": [
+              "pass",
+              "warning",
+              "blocked",
+              "unknown"
+            ],
+            "title": "Registration Quality Status",
+            "type": "string"
+          },
+          "registration_status": {
+            "enum": [
+              "approved",
+              "candidate",
+              "blocked",
+              "unknown"
+            ],
+            "title": "Registration Status",
+            "type": "string"
+          },
+          "runtime_quality_status": {
+            "enum": [
+              "pass",
+              "warning",
+              "blocked",
+              "unknown"
+            ],
+            "title": "Runtime Quality Status",
+            "type": "string"
+          },
+          "source_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version"
+          }
+        },
+        "required": [
+          "quality_status",
+          "registration_status",
+          "registration_quality_status",
+          "runtime_quality_status",
+          "freshness_status"
+        ],
+        "title": "GovernanceDataSource",
+        "type": "object"
+      },
+      "GovernanceIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "identity_adapter": {
+            "const": "static-token-single-subject",
+            "title": "Identity Adapter",
+            "type": "string"
+          },
+          "multi_user_isolation": {
+            "title": "Multi User Isolation",
+            "type": "boolean"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "subject_id": {
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "tenant_or_department": {
+            "title": "Tenant Or Department",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject_id",
+          "tenant_or_department",
+          "roles",
+          "identity_adapter",
+          "multi_user_isolation"
+        ],
+        "title": "GovernanceIdentity",
+        "type": "object"
+      },
+      "GovernanceModelPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "active_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Model"
+          },
+          "active_provider": {
+            "title": "Active Provider",
+            "type": "string"
+          },
+          "data_egress": {
+            "enum": [
+              "deny",
+              "synthetic-only",
+              "aggregate-approved"
+            ],
+            "title": "Data Egress",
+            "type": "string"
+          },
+          "endpoint_binding_verified": {
+            "title": "Endpoint Binding Verified",
+            "type": "boolean"
+          },
+          "endpoint_policy_id": {
+            "title": "Endpoint Policy Id",
+            "type": "string"
+          },
+          "endpoint_target_hash": {
+            "title": "Endpoint Target Hash",
+            "type": "string"
+          },
+          "evidence_egress_allowed": {
+            "title": "Evidence Egress Allowed",
+            "type": "boolean"
+          },
+          "intent_egress": {
+            "enum": [
+              "deny",
+              "synthetic-only",
+              "metadata-approved"
+            ],
+            "title": "Intent Egress",
+            "type": "string"
+          },
+          "intent_egress_allowed": {
+            "title": "Intent Egress Allowed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "endpoint_policy_id",
+          "data_egress",
+          "intent_egress",
+          "evidence_egress_allowed",
+          "intent_egress_allowed",
+          "active_provider",
+          "endpoint_target_hash",
+          "endpoint_binding_verified"
+        ],
+        "title": "GovernanceModelPolicy",
+        "type": "object"
+      },
+      "GovernancePromotionGate": {
+        "additionalProperties": false,
+        "properties": {
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "configured_status": {
+            "title": "Configured Status",
+            "type": "string"
+          },
+          "enforced": {
+            "title": "Enforced",
+            "type": "boolean"
+          },
+          "gate_id": {
+            "title": "Gate Id",
+            "type": "string"
+          },
+          "local_live_shadow_acknowledged": {
+            "title": "Local Live Shadow Acknowledged",
+            "type": "boolean"
+          },
+          "missing_owner_roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Owner Roles",
+            "type": "array"
+          },
+          "missing_thresholds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Thresholds",
+            "type": "array"
+          },
+          "pending_artifacts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Pending Artifacts",
+            "type": "array"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "runtime_flag_requested": {
+            "title": "Runtime Flag Requested",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "gate_id",
+          "configured_status",
+          "enforced",
+          "ready",
+          "runtime_flag_requested",
+          "local_live_shadow_acknowledged",
+          "blockers",
+          "missing_owner_roles",
+          "missing_thresholds",
+          "pending_artifacts"
+        ],
+        "title": "GovernancePromotionGate",
+        "type": "object"
+      },
+      "GovernanceStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "access_scope": {
+            "$ref": "#/components/schemas/GovernanceAccessScope"
+          },
+          "assistant_enabled": {
+            "title": "Assistant Enabled",
+            "type": "boolean"
+          },
+          "assistant_status": {
+            "enum": [
+              "synthetic_baseline",
+              "disabled_by_runtime_flag",
+              "blocked_by_promotion_gate",
+              "enabled_for_local_shadow",
+              "enabled_after_promotion"
+            ],
+            "title": "Assistant Status",
+            "type": "string"
+          },
+          "data_scope": {
+            "enum": [
+              "synthetic",
+              "production-shadow",
+              "production-readonly"
+            ],
+            "title": "Data Scope",
+            "type": "string"
+          },
+          "data_source": {
+            "$ref": "#/components/schemas/GovernanceDataSource"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/GovernanceIdentity"
+          },
+          "model_policy": {
+            "$ref": "#/components/schemas/GovernanceModelPolicy"
+          },
+          "promotion": {
+            "$ref": "#/components/schemas/GovernancePromotionGate"
+          },
+          "tool_registry": {
+            "$ref": "#/components/schemas/GovernanceToolRegistry"
+          }
+        },
+        "required": [
+          "data_scope",
+          "assistant_enabled",
+          "assistant_status",
+          "identity",
+          "access_scope",
+          "model_policy",
+          "data_source",
+          "promotion",
+          "tool_registry"
+        ],
+        "title": "GovernanceStatus",
+        "type": "object"
+      },
+      "GovernanceToolRegistry": {
+        "additionalProperties": false,
+        "properties": {
+          "registered_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Registered Tools",
+            "type": "array"
+          },
+          "tool_count": {
+            "title": "Tool Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "registered_tools",
+          "tool_count"
+        ],
+        "title": "GovernanceToolRegistry",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -646,8 +1683,21 @@
         "additionalProperties": false,
         "properties": {
           "data_scope": {
-            "const": "synthetic",
+            "enum": [
+              "synthetic",
+              "production-shadow",
+              "production-readonly"
+            ],
             "title": "Data Scope",
+            "type": "string"
+          },
+          "data_status": {
+            "default": "synthetic-ready",
+            "enum": [
+              "synthetic-ready",
+              "shadow-configured"
+            ],
+            "title": "Data Status",
             "type": "string"
           },
           "environment": {
@@ -748,6 +1798,27 @@
             "title": "Ambiguities",
             "type": "array"
           },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "dataset_role": {
+            "default": "actual",
+            "enum": [
+              "actual",
+              "reference",
+              "forecast"
+            ],
+            "title": "Dataset Role",
+            "type": "string"
+          },
           "entities": {
             "$ref": "#/components/schemas/EntitySet"
           },
@@ -761,6 +1832,11 @@
               }
             ]
           },
+          "metric_version": {
+            "default": "1.0.0",
+            "title": "Metric Version",
+            "type": "string"
+          },
           "metrics": {
             "items": {
               "type": "string"
@@ -773,6 +1849,17 @@
             "title": "Needs Clarification",
             "type": "boolean"
           },
+          "source_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version"
+          },
           "task_type": {
             "enum": [
               "query",
@@ -784,9 +1871,25 @@
               "correlation",
               "diagnosis",
               "trend",
-              "report"
+              "report",
+              "travel",
+              "help",
+              "general"
             ],
             "title": "Task Type",
+            "type": "string"
+          },
+          "time_grain": {
+            "default": "source",
+            "enum": [
+              "source",
+              "10m",
+              "15m",
+              "30m",
+              "hour",
+              "day"
+            ],
+            "title": "Time Grain",
             "type": "string"
           },
           "time_scope": {
@@ -798,6 +1901,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/TransferAnalysisSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "travel_spec": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TravelPlanSpec"
               },
               {
                 "type": "null"
@@ -820,6 +1933,39 @@
       "MetricCatalogItem": {
         "additionalProperties": false,
         "properties": {
+          "admission_status": {
+            "default": "synthetic_only",
+            "enum": [
+              "approved",
+              "candidate",
+              "synthetic_only",
+              "blocked"
+            ],
+            "title": "Admission Status",
+            "type": "string"
+          },
+          "allowed_grains": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Grains",
+            "type": "array"
+          },
+          "dataset_role": {
+            "default": "actual",
+            "enum": [
+              "actual",
+              "reference",
+              "forecast"
+            ],
+            "title": "Dataset Role",
+            "type": "string"
+          },
+          "definition": {
+            "default": "",
+            "title": "Definition",
+            "type": "string"
+          },
           "dimensions": {
             "items": {
               "type": "string"
@@ -835,8 +1981,18 @@
             "title": "Label",
             "type": "string"
           },
+          "logical_dataset": {
+            "default": "synthetic_passenger_flow",
+            "title": "Logical Dataset",
+            "type": "string"
+          },
           "unit": {
             "title": "Unit",
+            "type": "string"
+          },
+          "version": {
+            "default": "1.0.0",
+            "title": "Version",
             "type": "string"
           }
         },
@@ -847,6 +2003,108 @@
           "dimensions"
         ],
         "title": "MetricCatalogItem",
+        "type": "object"
+      },
+      "ModelEgressRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "call_id": {
+            "title": "Call Id",
+            "type": "string"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "decision": {
+            "enum": [
+              "denied",
+              "approved"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "endpoint_binding_verified": {
+            "title": "Endpoint Binding Verified",
+            "type": "boolean"
+          },
+          "endpoint_policy_id": {
+            "title": "Endpoint Policy Id",
+            "type": "string"
+          },
+          "endpoint_target_hash": {
+            "title": "Endpoint Target Hash",
+            "type": "string"
+          },
+          "exact_payload_hash": {
+            "title": "Exact Payload Hash",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "outbound_field_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Outbound Field Paths",
+            "type": "array"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "purpose": {
+            "enum": [
+              "intent_candidate",
+              "synthesis"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "started",
+              "succeeded",
+              "failed",
+              "not_called"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "call_id",
+          "purpose",
+          "decision",
+          "endpoint_policy_id",
+          "provider",
+          "endpoint_target_hash",
+          "endpoint_binding_verified",
+          "exact_payload_hash",
+          "started_at",
+          "status"
+        ],
+        "title": "ModelEgressRecord",
         "type": "object"
       },
       "ModelRuntime": {
@@ -997,6 +2255,190 @@
         "title": "ModelRuntime",
         "type": "object"
       },
+      "OperationIR": {
+        "additionalProperties": false,
+        "properties": {
+          "answer_policy": {
+            "default": "llm_synthesis",
+            "enum": [
+              "deterministic_table",
+              "deterministic_summary",
+              "llm_synthesis",
+              "llm_general"
+            ],
+            "title": "Answer Policy",
+            "type": "string"
+          },
+          "completeness_required": {
+            "default": true,
+            "title": "Completeness Required",
+            "type": "boolean"
+          },
+          "departure_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Departure Time"
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination"
+          },
+          "entity_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "station",
+                  "line",
+                  "direction",
+                  "date",
+                  "metric"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Type"
+          },
+          "filters": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Filters",
+            "type": "array"
+          },
+          "metric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metric"
+          },
+          "operation": {
+            "enum": [
+              "list_entities",
+              "describe_entity",
+              "list_metrics",
+              "list_available_dates",
+              "summarize_dataset",
+              "query_metric",
+              "rank_entities",
+              "compare_periods",
+              "forecast",
+              "alert",
+              "transfer",
+              "geo",
+              "correlation",
+              "diagnosis",
+              "trend_analysis",
+              "report",
+              "capability_readiness",
+              "travel_plan",
+              "capability_help",
+              "general_answer"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin"
+          },
+          "route_confidence": {
+            "default": "high",
+            "enum": [
+              "high",
+              "model_candidate"
+            ],
+            "title": "Route Confidence",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "scope": {
+            "default": "requested_query_scope",
+            "enum": [
+              "approved_observation_window",
+              "registered_catalog",
+              "authoritative_master",
+              "requested_query_scope",
+              "external_navigation",
+              "general_knowledge"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "target_query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Query"
+          },
+          "time_range": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Time Range",
+            "type": "object"
+          },
+          "travel_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "public_transit",
+                  "driving",
+                  "walking"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Travel Mode"
+          }
+        },
+        "required": [
+          "operation"
+        ],
+        "title": "OperationIR",
+        "type": "object"
+      },
       "QueryFilter": {
         "additionalProperties": false,
         "properties": {
@@ -1040,9 +2482,98 @@
         "title": "QueryFilter",
         "type": "object"
       },
+      "QueryOrder": {
+        "additionalProperties": false,
+        "properties": {
+          "direction": {
+            "default": "desc",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "field": {
+            "minLength": 1,
+            "title": "Field",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field"
+        ],
+        "title": "QueryOrder",
+        "type": "object"
+      },
       "QueryRequest": {
         "additionalProperties": false,
         "properties": {
+          "calendar_version": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Version"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "comparison_periods": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComparisonPeriods"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cross_midnight_policy": {
+            "default": "reject",
+            "enum": [
+              "reject",
+              "service_day_calendar"
+            ],
+            "title": "Cross Midnight Policy",
+            "type": "string"
+          },
+          "data_as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data As Of"
+          },
+          "dataset_role": {
+            "default": "actual",
+            "enum": [
+              "actual",
+              "reference",
+              "forecast"
+            ],
+            "title": "Dataset Role",
+            "type": "string"
+          },
           "dimensions": {
             "items": {
               "enum": [
@@ -1075,8 +2606,74 @@
             "title": "Metric",
             "type": "string"
           },
+          "metric_version": {
+            "default": "1.0.0",
+            "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+            "title": "Metric Version",
+            "type": "string"
+          },
+          "order_by": {
+            "items": {
+              "$ref": "#/components/schemas/QueryOrder"
+            },
+            "maxItems": 2,
+            "title": "Order By",
+            "type": "array"
+          },
+          "service_day": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Day"
+          },
+          "source_version": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version"
+          },
+          "time_basis": {
+            "default": "event_time",
+            "enum": [
+              "event_time",
+              "service_day"
+            ],
+            "title": "Time Basis",
+            "type": "string"
+          },
+          "time_grain": {
+            "default": "source",
+            "enum": [
+              "source",
+              "10m",
+              "15m",
+              "30m",
+              "hour",
+              "day"
+            ],
+            "title": "Time Grain",
+            "type": "string"
+          },
           "time_range": {
             "$ref": "#/components/schemas/TimeRange"
+          },
+          "timezone": {
+            "const": "Asia/Shanghai",
+            "default": "Asia/Shanghai",
+            "title": "Timezone",
+            "type": "string"
           }
         },
         "required": [
@@ -1094,6 +2691,16 @@
           "audit": {
             "$ref": "#/components/schemas/AuditSummary"
           },
+          "data_scope": {
+            "default": "synthetic",
+            "enum": [
+              "synthetic",
+              "production-shadow",
+              "production-readonly"
+            ],
+            "title": "Data Scope",
+            "type": "string"
+          },
           "dimensions": {
             "items": {
               "type": "string"
@@ -1104,6 +2711,11 @@
           "metric": {
             "title": "Metric",
             "type": "string"
+          },
+          "provenance": {
+            "additionalProperties": true,
+            "title": "Provenance",
+            "type": "object"
           },
           "row_count": {
             "title": "Row Count",
@@ -1134,13 +2746,54 @@
         "title": "QueryResponse",
         "type": "object"
       },
+      "ResultFieldSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "minLength": 1,
+            "title": "Field",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "boolean",
+              "integer",
+              "number",
+              "null",
+              "string"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "type"
+        ],
+        "title": "ResultFieldSpec",
+        "type": "object"
+      },
       "RunRecord": {
         "additionalProperties": false,
         "properties": {
+          "access_scope_hash": {
+            "title": "Access Scope Hash",
+            "type": "string"
+          },
           "adopted_response": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/AssistantResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "capability_match": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CapabilityMatch"
               },
               {
                 "type": "null"
@@ -1172,6 +2825,30 @@
               }
             ]
           },
+          "failure_category": {
+            "anyOf": [
+              {
+                "enum": [
+                  "material_ambiguity",
+                  "intent_unrecognized",
+                  "entity_not_found",
+                  "capability_gap",
+                  "query_ir_unsupported",
+                  "data_unavailable",
+                  "result_truncated",
+                  "tool_failure",
+                  "model_failure",
+                  "verification_failure",
+                  "authorization_failure"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Category"
+          },
           "human_feedback": {
             "items": {
               "$ref": "#/components/schemas/HumanFeedback"
@@ -1189,11 +2866,46 @@
               }
             ]
           },
+          "intent_route": {
+            "default": "deterministic",
+            "enum": [
+              "deterministic",
+              "model_candidate",
+              "clarification"
+            ],
+            "title": "Intent Route",
+            "type": "string"
+          },
+          "model_egress": {
+            "items": {
+              "$ref": "#/components/schemas/ModelEgressRecord"
+            },
+            "title": "Model Egress",
+            "type": "array"
+          },
           "model_runtime": {
             "$ref": "#/components/schemas/ModelRuntime"
           },
+          "operation_ir": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OperationIR"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "original_question": {
             "title": "Original Question",
+            "type": "string"
+          },
+          "owner_subject_id": {
+            "title": "Owner Subject Id",
+            "type": "string"
+          },
+          "owner_tenant_or_department": {
+            "title": "Owner Tenant Or Department",
             "type": "string"
           },
           "plan": {
@@ -1205,6 +2917,16 @@
                 "type": "null"
               }
             ]
+          },
+          "planner_route": {
+            "const": "deterministic",
+            "default": "deterministic",
+            "title": "Planner Route",
+            "type": "string"
+          },
+          "policy_snapshot_id": {
+            "title": "Policy Snapshot Id",
+            "type": "string"
           },
           "provider": {
             "title": "Provider",
@@ -1273,6 +2995,10 @@
           "run_id",
           "session_id",
           "provider",
+          "owner_subject_id",
+          "owner_tenant_or_department",
+          "access_scope_hash",
+          "policy_snapshot_id",
           "original_question"
         ],
         "title": "RunRecord",
@@ -1281,6 +3007,10 @@
       "SessionRecord": {
         "additionalProperties": false,
         "properties": {
+          "access_scope_hash": {
+            "title": "Access Scope Hash",
+            "type": "string"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
@@ -1295,6 +3025,18 @@
             "title": "Messages",
             "type": "array"
           },
+          "owner_subject_id": {
+            "title": "Owner Subject Id",
+            "type": "string"
+          },
+          "owner_tenant_or_department": {
+            "title": "Owner Tenant Or Department",
+            "type": "string"
+          },
+          "policy_snapshot_id": {
+            "title": "Policy Snapshot Id",
+            "type": "string"
+          },
           "session_id": {
             "title": "Session Id",
             "type": "string"
@@ -1302,9 +3044,108 @@
         },
         "required": [
           "session_id",
-          "created_at"
+          "created_at",
+          "owner_subject_id",
+          "owner_tenant_or_department",
+          "access_scope_hash",
+          "policy_snapshot_id"
         ],
         "title": "SessionRecord",
+        "type": "object"
+      },
+      "StructuredClaim": {
+        "additionalProperties": false,
+        "properties": {
+          "aggregation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aggregation"
+          },
+          "claim_type": {
+            "enum": [
+              "metric_total",
+              "result_row"
+            ],
+            "title": "Claim Type",
+            "type": "string"
+          },
+          "dimensions": {
+            "additionalProperties": true,
+            "title": "Dimensions",
+            "type": "object"
+          },
+          "metric_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metric Id"
+          },
+          "metric_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metric Version"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "values": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "required": [
+          "claim_type"
+        ],
+        "title": "StructuredClaim",
         "type": "object"
       },
       "TaskPlan": {
@@ -1345,7 +3186,10 @@
               "correlation",
               "diagnosis",
               "trend",
-              "report"
+              "report",
+              "travel",
+              "help",
+              "general"
             ],
             "title": "Task Type",
             "type": "string"
@@ -1383,12 +3227,53 @@
       "ToolResult": {
         "additionalProperties": false,
         "properties": {
+          "access_scope_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Scope Hash"
+          },
           "artifact_refs": {
             "items": {
               "type": "string"
             },
             "title": "Artifact Refs",
             "type": "array"
+          },
+          "block_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block Reason"
+          },
+          "calculation_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calculation Method"
+          },
+          "complete": {
+            "default": true,
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/CoverageEvidence"
           },
           "error_code": {
             "anyOf": [
@@ -1401,12 +3286,86 @@
             ],
             "title": "Error Code"
           },
+          "logical_plan_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logical Plan Hash"
+          },
+          "matched_count_unknown": {
+            "default": false,
+            "title": "Matched Count Unknown",
+            "type": "boolean"
+          },
+          "matched_row_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Row Count"
+          },
+          "policy_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Snapshot Id"
+          },
+          "query_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query Fingerprint"
+          },
+          "result_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Hash"
+          },
+          "returned_row_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Returned Row Count",
+            "type": "integer"
+          },
           "rows": {
             "items": {
               "additionalProperties": true,
               "type": "object"
             },
             "title": "Rows",
+            "type": "array"
+          },
+          "source_step_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Step Ids",
             "type": "array"
           },
           "status": {
@@ -1430,6 +3389,11 @@
           "tool": {
             "title": "Tool",
             "type": "string"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
           },
           "warnings": {
             "items": {
@@ -1513,6 +3477,71 @@
           }
         },
         "title": "TransferAnalysisSpec",
+        "type": "object"
+      },
+      "TravelPlanSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "city": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "departure_time": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Departure Time"
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination"
+          },
+          "mode": {
+            "default": "public_transit",
+            "enum": [
+              "public_transit",
+              "driving",
+              "walking"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin"
+          }
+        },
+        "title": "TravelPlanSpec",
         "type": "object"
       },
       "ValidationError": {
@@ -1638,7 +3667,7 @@
     }
   },
   "info": {
-    "summary": "Synthetic-only mobile API for governed passenger-flow queries",
+    "summary": "Governed passenger-flow query API with a synthetic baseline",
     "title": "Metro Passenger Flow API",
     "version": "0.4.0"
   },
@@ -2030,6 +4059,32 @@
         "summary": "Forecast",
         "tags": [
           "forecasts"
+        ]
+      }
+    },
+    "/api/v1/governance/status": {
+      "get": {
+        "operationId": "governance_status_api_v1_governance_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Governance Status",
+        "tags": [
+          "governance"
         ]
       }
     },

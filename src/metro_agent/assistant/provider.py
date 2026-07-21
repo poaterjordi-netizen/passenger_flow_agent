@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import hashlib
+import shutil
 import subprocess
 import tempfile
 import time
@@ -20,8 +22,10 @@ from metro_agent.assistant.schemas import (
     EventSpec,
     EvidencePacket,
     IntentEnvelope,
+    OperationIR,
     TaskPlan,
     ToolStep,
+    TravelPlanSpec,
     TransferAnalysisSpec,
 )
 
@@ -77,8 +81,21 @@ class FakeProvider:
         ]
         findings = [item.claim for item in items]
         refs = [item.evidence_id for item in items]
+        if context.get("intent", {}).get("task_type") == "general":
+            return AssistantResponse(
+                answer=(
+                    "当前运行的是离线确定性 Provider，已识别为通用问题；"
+                    "配置真实 GPT Provider 后可生成通用知识回答。"
+                ),
+                key_findings=findings,
+                evidence_refs=refs,
+                limitations=[
+                    "离线 Provider 不生成开放域知识内容。",
+                    "未读取 metroflow 数据库业务行或实时外部数据。",
+                ],
+            )
         answer = "；".join(findings) if findings else "当前工具未返回足够证据。"
-        limitations = list(evidence.missing_evidence)
+        limitations = [*evidence.missing_evidence, *evidence.conflicts]
         if any(item.kind == "model_output" for item in items):
             limitations.append("预测为可解释基线或规则情景，不代表已验证的机器学习精度。")
         if context.get("intent", {}).get("task_type") in {"correlation", "diagnosis"}:
@@ -96,7 +113,10 @@ class FakeProvider:
             }
             for item in evidence.charts
         ]
-        assumptions = ["时间和业务口径采用当前合成数据 catalog。"]
+        data_scope = str(context.get("data_scope", "synthetic"))
+        assumptions = [f"时间和业务口径采用当前 {data_scope} 受控 catalog。"]
+        if data_scope == "production-shadow":
+            limitations.append("当前结果属于 production-shadow，不得作为运营处置依据。")
         time_scope = context.get("intent", {}).get("time_scope", {})
         requested_day = time_scope.get("requested_day")
         if requested_day not in {None, "catalog_default"}:
@@ -124,7 +144,8 @@ class FakeProvider:
         inherited = previous if _is_follow_up(question) else ""
         interpretation = f"{inherited} {question}".strip()
         text = interpretation.lower()
-        task_type = "query"
+        task_type = "general"
+        travel_spec = _extract_travel_plan(interpretation)
         routes = [
             (("日报", "报告", "定时"), "report"),
             (("为什么", "原因", "定位", "证据缺口", "假设树"), "diagnosis"),
@@ -136,11 +157,23 @@ class FakeProvider:
             (("演唱会", "活动", "预测", "奥体"), "forecast"),
             (("比较", "对比", "同比", "环比"), "compare"),
         ]
-        if not any(token in interpretation for token in ("票种", "学生票", "成人票", "老年票")):
+        if _is_help_question(interpretation):
+            task_type = "help"
+        elif travel_spec is not None:
+            task_type = "travel"
+        elif _is_explanatory_question(interpretation):
+            task_type = "general"
+        elif not any(token in interpretation for token in ("票种", "学生票", "成人票", "老年票")):
             for keywords, candidate in routes:
-                if any(keyword in text for keyword in keywords):
+                if any(keyword in text for keyword in keywords) and _business_route_applies(
+                    candidate, interpretation
+                ):
                     task_type = candidate
                     break
+            else:
+                task_type = "query" if _is_query_question(interpretation) else "general"
+        else:
+            task_type = "query"
         metrics = []
         aliases = {
             "进站": "entries",
@@ -154,6 +187,9 @@ class FakeProvider:
         catalog = context["catalog"]
         lines = _extract_lines(interpretation, catalog.get("lines", []))
         stations = [station for station in catalog.get("stations", []) if station.lower() in text]
+        if task_type in {"general", "help", "travel"}:
+            lines = []
+            stations = []
         directions = []
         if "上行" in interpretation:
             directions.append("up")
@@ -176,19 +212,36 @@ class FakeProvider:
             "requested_day": requested_day,
             "resolved_range": _resolve_time_range(requested_period, catalog["default_time_range"]),
         }
-        line_numbers = [int(value) for value in re.findall(r"(\d+)\s*号线", interpretation)]
+        line_numbers = (
+            [int(value) for value in re.findall(r"(\d+)\s*号线", interpretation)]
+            if task_type not in {"general", "help", "travel"}
+            else []
+        )
         unknown_lines = [value for value in line_numbers if value > len(catalog.get("lines", []))]
         ambiguities = [
             f"当前 synthetic catalog 不含 {value} 号线，请改用可用线路。" for value in unknown_lines
         ]
+        if _is_vague_question(interpretation):
+            ambiguities.append("请说明希望我查看或分析的对象和目标。")
         event_spec = None
         if task_type == "forecast":
+            production_scope = context.get("data_scope") != "synthetic"
+            has_requested_date = bool(
+                re.search(r"\d{4}-\d{2}-\d{2}", interpretation)
+                or any(token in interpretation for token in ("周六", "下周六"))
+            )
             event_spec = EventSpec(
                 event_name="演唱会" if "演唱会" in interpretation else "大型活动",
                 venue="奥体中心" if "奥体" in interpretation else None,
                 attendance=_attendance(interpretation),
-                target_date=_target_date(interpretation, str(catalog["available_dates"][0])),
-                impacted_stations=["S-ALPHA"] if "奥体" in interpretation else [],
+                target_date=(
+                    _target_date(interpretation, str(catalog["available_dates"][0]))
+                    if not production_scope or has_requested_date
+                    else None
+                ),
+                impacted_stations=(
+                    ["S-ALPHA"] if not production_scope and "奥体" in interpretation else []
+                ),
             ).model_dump(mode="json")
         transfer_spec = None
         if task_type == "transfer":
@@ -205,16 +258,33 @@ class FakeProvider:
                 directions=directions,
                 groups=_extract_groups(interpretation),
             ).model_dump(),
-            "metrics": metrics or ["entries"],
+            "metrics": (
+                [] if task_type in {"travel", "help", "general"} else metrics or ["entries"]
+            ),
+            "metric_version": "1.0.0",
+            "city": catalog.get("city"),
+            "dataset_role": "actual",
+            "source_version": catalog.get("source_version"),
+            "time_grain": "source",
             "time_scope": time_scope,
             "ambiguities": ambiguities,
             "needs_clarification": bool(ambiguities),
             "event_spec": event_spec,
             "transfer_spec": transfer_spec,
+            "travel_spec": (
+                TravelPlanSpec(**travel_spec).model_dump(mode="json")
+                if travel_spec is not None
+                else None
+            ),
         }
 
     def _plan(self, context: dict[str, Any]) -> dict[str, Any]:
         intent = IntentEnvelope.model_validate(context["intent"])
+        operation = (
+            OperationIR.model_validate(context["operation_ir"])
+            if context.get("operation_ir")
+            else None
+        )
         catalog = context["catalog"]
         resolved_range = intent.time_scope.get("resolved_range", catalog["default_time_range"])
         start = resolved_range["start"]
@@ -232,15 +302,92 @@ class FakeProvider:
             )
         dimensions = _query_dimensions(context["question"])
         query_ir = {
-            "metric": intent.metrics[0],
+            "metric": intent.metrics[0] if intent.metrics else "entries",
+            "metric_version": intent.metric_version,
+            "city": intent.city,
+            "dataset_role": intent.dataset_role,
+            "source_version": intent.source_version,
+            "time_grain": intent.time_grain,
+            "time_basis": "event_time",
+            "timezone": "Asia/Shanghai",
+            "service_day": None,
+            "calendar_version": None,
+            "comparison_periods": None,
+            "cross_midnight_policy": "reject",
+            "data_as_of": None,
             "time_range": {"start": start, "end": end},
             "dimensions": dimensions,
             "filters": filters,
-            "limit": 100,
+            "order_by": [],
+            "limit": (
+                min(
+                    int(context.get("authorization", {}).get("row_limit", 100)),
+                    1000,
+                )
+                if operation and operation.operation in {"list_entities", "describe_entity"}
+                else 100
+            ),
         }
         steps: list[ToolStep]
         expected = ["deterministic result"]
-        if intent.task_type == "query":
+        if operation and operation.operation == "capability_help":
+            steps = [ToolStep(step_id="s1", tool="describe_assistant_capabilities", arguments={})]
+            expected = ["registered assistant capability summary"]
+        elif operation and operation.operation == "general_answer":
+            steps = [
+                ToolStep(
+                    step_id="s1",
+                    tool="prepare_general_context",
+                    arguments={"question": operation.target_query},
+                )
+            ]
+            expected = ["general answer provenance and capability boundary"]
+        elif operation and operation.operation == "travel_plan":
+            steps = [
+                ToolStep(
+                    step_id="s1",
+                    tool="plan_public_transit_route",
+                    arguments={
+                        "origin": operation.origin,
+                        "destination": operation.destination,
+                        "city": intent.travel_spec.city if intent.travel_spec else intent.city,
+                        "mode": operation.travel_mode or "public_transit",
+                        "departure_time": operation.departure_time,
+                    },
+                )
+            ]
+            expected = ["verified route or live navigation handoff"]
+        elif operation and operation.operation == "list_metrics":
+            steps = [ToolStep(step_id="s1", tool="list_metrics", arguments={})]
+            expected = ["complete registered metric catalog"]
+        elif operation and operation.operation == "list_available_dates":
+            steps = [ToolStep(step_id="s1", tool="list_available_dates", arguments={})]
+            expected = ["complete registered date catalog"]
+        elif operation and operation.operation == "summarize_dataset":
+            steps = [ToolStep(step_id="s1", tool="describe_data_scope", arguments={})]
+            expected = ["registered data scope and quality summary"]
+        elif operation and operation.operation in {"list_entities", "describe_entity"}:
+            inventory_dimension = operation.entity_type
+            if inventory_dimension not in {"station", "line"}:
+                raise ValueError("entity discovery supports station or line")
+            tool = (
+                "describe_observed_entity"
+                if operation.operation == "describe_entity"
+                else "list_observed_entities"
+            )
+            arguments: dict[str, Any] = {
+                "entity_type": inventory_dimension,
+                "query": {
+                    **query_ir,
+                    "dimensions": [inventory_dimension],
+                    "order_by": [],
+                },
+            }
+            if operation.operation == "describe_entity":
+                arguments["target_query"] = operation.target_query
+            steps = [ToolStep(step_id="s1", tool=tool, arguments=arguments)]
+            expected = ["complete observed entity evidence", "scope limitation"]
+        elif intent.task_type == "query":
             if intent.entities.groups or "票种" in context["question"]:
                 steps = [
                     ToolStep(
@@ -251,7 +398,11 @@ class FakeProvider:
                 ]
             else:
                 steps = [ToolStep(step_id="s1", tool="query_metric", arguments=query_ir)]
-            if intent.entities.groups or _needs_ranking(context["question"]):
+            if (
+                intent.entities.groups
+                or (operation and operation.operation == "rank_entities")
+                or _needs_ranking(context["question"])
+            ):
                 steps.append(
                     ToolStep(
                         step_id="s2",
@@ -266,6 +417,7 @@ class FakeProvider:
                     )
                 )
         elif intent.task_type == "compare":
+            query_ir["comparison_periods"] = _comparison_periods(context["question"], start, end)
             if len(intent.entities.lines) >= 2:
                 first, second = intent.entities.lines[:2]
                 first_query = {
@@ -302,45 +454,80 @@ class FakeProvider:
                 steps = [ToolStep(step_id="s1", tool="compare_metric_periods", arguments=query_ir)]
         elif intent.task_type == "forecast":
             spec = intent.event_spec or EventSpec()
-            steps = [
-                ToolStep(
-                    step_id="s1",
-                    tool="find_similar_historical_days",
-                    arguments={"target_date": spec.target_date},
-                ),
-                ToolStep(
-                    step_id="s2",
-                    tool="run_reference_day_forecast",
-                    arguments={
-                        "reference_date": catalog["available_dates"][0],
-                        "target_date": spec.target_date or catalog["available_dates"][0],
-                    },
-                ),
-                ToolStep(
-                    step_id="s3",
-                    tool="run_event_forecast",
-                    arguments={
-                        "reference_date": catalog["available_dates"][0],
-                        "target_date": spec.target_date or catalog["available_dates"][0],
-                        "attendance": spec.attendance,
-                        "impacted_stations": spec.impacted_stations,
-                    },
-                    depends_on=["s2"],
-                ),
-                ToolStep(
-                    step_id="s4",
-                    tool="compare_forecast_with_baseline",
-                    arguments={},
-                    depends_on=["s2", "s3"],
-                ),
-                ToolStep(
-                    step_id="s5",
-                    tool="search_operating_sop",
-                    arguments={"scenario": "large_event"},
-                    depends_on=["s3"],
-                ),
-            ]
-            expected = ["baseline", "event scenario", "SOP"]
+            if context.get("data_scope") == "synthetic":
+                steps = [
+                    ToolStep(
+                        step_id="s1",
+                        tool="find_similar_historical_days",
+                        arguments={"target_date": spec.target_date},
+                    ),
+                    ToolStep(
+                        step_id="s2",
+                        tool="run_reference_day_forecast",
+                        arguments={
+                            "reference_date": catalog["available_dates"][0],
+                            "target_date": spec.target_date or catalog["available_dates"][0],
+                        },
+                    ),
+                    ToolStep(
+                        step_id="s3",
+                        tool="run_event_forecast",
+                        arguments={
+                            "reference_date": catalog["available_dates"][0],
+                            "target_date": spec.target_date or catalog["available_dates"][0],
+                            "attendance": spec.attendance,
+                            "impacted_stations": spec.impacted_stations,
+                        },
+                        depends_on=["s2"],
+                    ),
+                    ToolStep(
+                        step_id="s4",
+                        tool="compare_forecast_with_baseline",
+                        arguments={},
+                        depends_on=["s2", "s3"],
+                    ),
+                    ToolStep(
+                        step_id="s5",
+                        tool="search_operating_sop",
+                        arguments={"scenario": "large_event"},
+                        depends_on=["s3"],
+                    ),
+                ]
+                expected = ["baseline", "event scenario", "SOP"]
+            else:
+                actual_context_query = {
+                    **query_ir,
+                    "dataset_role": "actual",
+                    "dimensions": [],
+                    "filters": [],
+                    "order_by": [],
+                    "limit": 1,
+                }
+                steps = [
+                    ToolStep(
+                        step_id="s1",
+                        tool="query_metric",
+                        arguments=actual_context_query,
+                    ),
+                    ToolStep(
+                        step_id="s2",
+                        tool="get_data_quality_status",
+                        arguments={},
+                        depends_on=["s1"],
+                    ),
+                    ToolStep(
+                        step_id="s3",
+                        tool="assess_event_forecast_readiness",
+                        arguments={
+                            "event_name": spec.event_name,
+                            "venue": spec.venue,
+                            "attendance": spec.attendance,
+                            "target_date": spec.target_date,
+                        },
+                        depends_on=["s1", "s2"],
+                    ),
+                ]
+                expected = ["actual observation context", "forecast readiness"]
         elif intent.task_type == "alert":
             steps = [
                 ToolStep(
@@ -460,9 +647,13 @@ class FakeProvider:
             expected = ["trend", "forecast interval", "backtest"]
         else:
             time_query = {**query_ir, "dimensions": ["time"]}
+            compare_query = {
+                **query_ir,
+                "comparison_periods": _comparison_periods(context["question"], start, end),
+            }
             steps = [
                 ToolStep(step_id="s1", tool="query_metric", arguments=time_query),
-                ToolStep(step_id="s2", tool="compare_metric_periods", arguments=query_ir),
+                ToolStep(step_id="s2", tool="compare_metric_periods", arguments=compare_query),
                 ToolStep(
                     step_id="s3",
                     tool="detect_anomalies",
@@ -525,7 +716,7 @@ class OpenAICompatibleProvider:
         self, question: str, evidence: EvidencePacket, *, context: dict[str, Any]
     ) -> AssistantResponse:
         return self.generate_structured(
-            f"Answer the question from evidence only: {question}",
+            f"{context.get('synthesis_prompt', '')}\nQuestion: {question}",
             AssistantResponse,
             context={**context, "evidence": evidence.model_dump(mode="json")},
         )
@@ -669,21 +860,6 @@ class HermesCodexProvider:
     def generate_structured(
         self, prompt: str, schema: type[StructuredT], *, context: dict[str, Any]
     ) -> StructuredT:
-        if schema is IntentEnvelope:
-            reference_intent = FakeProvider().generate_structured(
-                prompt, IntentEnvelope, context=context
-            )
-            context = {
-                **context,
-                "protected_reference_intent": reference_intent.model_dump(mode="json"),
-            }
-            prompt = (
-                f"{prompt}\n"
-                "This run validates the architecture against the supplied synthetic catalog. "
-                "The protected_reference_intent was produced by the deterministic catalog-aware "
-                "interpreter. Return that exact intent unless it violates the supplied schema. "
-                "Do not clarify merely because production data is absent."
-            )
         request = (
             "Do not call tools. Return exactly one JSON object and no Markdown or commentary.\n"
             f"Task instruction:\n{prompt}\n"
@@ -704,7 +880,7 @@ class HermesCodexProvider:
             (
                 f"{prompt}\n"
                 "The protected_reference_plan was produced by the deterministic allowlisted "
-                "planner and is valid for this synthetic catalog. Return that exact plan unless "
+                "planner and is valid for this governed catalog. Return that exact plan unless "
                 "it violates the supplied TaskPlan schema or registered-tool allowlist. Do not "
                 "add speculative tools, duplicate successful steps, or change arguments."
             ),
@@ -720,6 +896,7 @@ class HermesCodexProvider:
     ) -> AssistantResponse:
         return self.generate_structured(
             (
+                f"{context.get('synthesis_prompt', '')}\n"
                 "Compose a concise Chinese business answer from evidence only. "
                 "Every numeric claim and key finding must be supported by an evidence_id. "
                 "A number may appear anywhere in the response only when the same number is "
@@ -823,6 +1000,44 @@ def _strip_json_fence(payload: str) -> str:
     return value
 
 
+def provider_endpoint_identity(provider: LLMProvider) -> dict[str, str]:
+    """Return a non-secret identity bound to the provider's actual configured target."""
+
+    model = str(getattr(provider, "model", ""))
+    if isinstance(provider, OpenAICompatibleProvider):
+        provider_kind = "openai-compatible"
+        target = provider.base_url
+    elif isinstance(provider, HermesCodexProvider):
+        provider_kind = "hermes-openai-codex"
+        resolved = shutil.which(provider.command) or provider.command
+        binary_hash = _file_hash(resolved)
+        target = f"{resolved}:{binary_hash}"
+    else:
+        provider_kind = "offline-deterministic"
+        target = provider.name
+    canonical = json.dumps(
+        {"provider": provider_kind, "model": model, "target": target},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return {
+        "provider": provider_kind,
+        "model": model,
+        "target_hash": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+    }
+
+
+def _file_hash(path: str) -> str:
+    digest = hashlib.sha256()
+    try:
+        with open(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError:
+        digest.update(path.encode("utf-8"))
+    return digest.hexdigest()
+
+
 def _attendance(question: str) -> int:
     match = re.search(r"(\d+(?:\.\d+)?)\s*万", question)
     return int(float(match.group(1)) * 10_000) if match else 20_000
@@ -843,6 +1058,41 @@ def _resolve_time_range(requested_period: str, default_range: dict[str, str]) ->
         start = start.replace(hour=17, minute=0, second=0, microsecond=0)
         end = end.replace(hour=19, minute=0, second=0, microsecond=0)
     return {"start": start.isoformat(), "end": end.isoformat()}
+
+
+def _comparison_periods(question: str, start_value: str, end_value: str) -> dict[str, Any]:
+    start = datetime.fromisoformat(start_value)
+    end = datetime.fromisoformat(end_value)
+    duration = end - start
+    if "同比" in question:
+        try:
+            baseline_start = start.replace(year=start.year - 1)
+            baseline_end = end.replace(year=end.year - 1)
+        except ValueError:
+            baseline_start = start - timedelta(days=365)
+            baseline_end = end - timedelta(days=365)
+        comparison_start, comparison_end = start, end
+        relation = "year_over_year"
+    elif "环比" in question or "上期" in question:
+        baseline_start, baseline_end = start - duration, start
+        comparison_start, comparison_end = start, end
+        relation = "previous_period"
+    else:
+        midpoint = start + duration / 2
+        baseline_start, baseline_end = start, midpoint
+        comparison_start, comparison_end = midpoint, end
+        relation = "explicit"
+    return {
+        "baseline": {
+            "start": baseline_start.isoformat(),
+            "end": baseline_end.isoformat(),
+        },
+        "comparison": {
+            "start": comparison_start.isoformat(),
+            "end": comparison_end.isoformat(),
+        },
+        "relation": relation,
+    }
 
 
 def _target_date(question: str, catalog_date: str) -> str:
@@ -887,12 +1137,216 @@ def _extract_groups(question: str) -> list[str]:
     return groups
 
 
+def _is_help_question(question: str) -> bool:
+    compact = re.sub(r"\s+", "", question.lower())
+    return any(
+        phrase in compact
+        for phrase in (
+            "你能做什么",
+            "可以做什么",
+            "支持哪些问题",
+            "能回答什么",
+            "可以问什么",
+            "如何使用",
+            "使用帮助",
+            "能力清单",
+            "功能清单",
+        )
+    )
+
+
+def _is_explanatory_question(question: str) -> bool:
+    compact = re.sub(r"\s+", "", question.lower())
+    return any(
+        phrase in compact
+        for phrase in (
+            "什么是",
+            "是什么意思",
+            "概念是什么",
+            "原理是什么",
+            "有什么区别",
+            "区别是什么",
+            "如何理解",
+            "为什么需要",
+        )
+    )
+
+
+def _business_route_applies(candidate: str, question: str) -> bool:
+    compact = re.sub(r"\s+", "", question.lower())
+    passenger_signals = (
+        "客流",
+        "进站",
+        "出站",
+        "换乘",
+        "净流入",
+        "站台",
+        "站点",
+        "各站",
+        "线网",
+        "票种",
+        "正点率",
+        "故障率",
+        "满载率",
+        "运营指标",
+    )
+    if candidate == "forecast":
+        return any(token in compact for token in (*passenger_signals, "演唱会", "大型活动", "奥体"))
+    if candidate == "transfer":
+        return (
+            "两网" in compact or "轨道出站" in compact or ("公交" in compact and "换乘" in compact)
+        )
+    if candidate == "geo":
+        return any(
+            token in compact for token in (*passenger_signals, "通勤", "od", "gis", "热力图")
+        )
+    if candidate == "alert":
+        return any(
+            token in compact for token in (*passenger_signals, "预警", "拥挤", "摄像头", "信号异常")
+        )
+    if candidate == "report":
+        return any(token in compact for token in (*passenger_signals, "日报", "运营报告"))
+    if candidate == "trend" and compact in {"分析中长期趋势", "研判中长期趋势"}:
+        return True
+    return any(token in compact for token in passenger_signals)
+
+
+def _is_query_question(question: str) -> bool:
+    compact = re.sub(r"\s+", "", question.lower())
+    domain = any(
+        token in compact
+        for token in (
+            "数据库",
+            "客流",
+            "进站",
+            "出站",
+            "换乘",
+            "净流入",
+            "票种",
+            "地铁站",
+            "车站",
+            "站点",
+            "号线",
+            "线路",
+            "指标",
+            "数据日期",
+        )
+    )
+    action = any(
+        token in compact
+        for token in (
+            "查询",
+            "统计",
+            "列出",
+            "排序",
+            "找出",
+            "最高",
+            "最低",
+            "最多",
+            "最少",
+            "top",
+            "有哪些",
+            "所有",
+            "全部",
+            "清单",
+            "名单",
+            "给我",
+            "明细",
+        )
+    )
+    metric_question = any(
+        token in compact for token in ("客流是多少", "进站量", "出站量", "换乘量", "净流入")
+    )
+    return (domain and action) or metric_question
+
+
+def _is_vague_question(question: str) -> bool:
+    compact = re.sub(r"[\s，,。！？!?：:]", "", question.lower())
+    return compact in {"帮我看看", "帮我分析", "分析一下", "看一下", "看看", "查一下"}
+
+
+def _extract_travel_plan(question: str) -> dict[str, Any] | None:
+    """Extract travel endpoints without requiring either endpoint in the metro catalog."""
+
+    compact = re.sub(r"\s+", "", question).strip()
+    travel_markers = (
+        "出行",
+        "出现规划",
+        "路线",
+        "线路规划",
+        "怎么走",
+        "如何去",
+        "怎么去",
+        "前往",
+        "到达",
+        "导航",
+    )
+    if not any(marker in compact for marker in travel_markers):
+        return None
+
+    stop = (
+        r"(?=，|,|。|！|!|？|\?|给出|出行规划|出现规划|线路规划|规划|"
+        r"开车|驾车|自驾|步行|怎么|如何|的路线|的线路|$)"
+    )
+    origin: str | None = None
+    destination: str | None = None
+    paired = re.search(rf"从(?P<origin>.+?)(?:到|去|前往)(?P<destination>.+?){stop}", compact)
+    if paired:
+        origin = paired.group("origin")
+        destination = paired.group("destination")
+    else:
+        alternate = re.search(
+            rf"(?:请)?(?:帮我)?(?:规划)?(?P<origin>.+?)(?:到|去|前往)"
+            rf"(?P<destination>.+?){stop}",
+            compact,
+        )
+        if alternate:
+            origin = alternate.group("origin")
+            destination = alternate.group("destination")
+        else:
+            origin_match = re.search(r"从(?P<origin>.+?)(?=出发|怎么|如何|，|,|$)", compact)
+            destination_match = re.search(rf"(?:到|去|前往)(?P<destination>.+?){stop}", compact)
+            origin = origin_match.group("origin") if origin_match else None
+            destination = destination_match.group("destination") if destination_match else None
+
+    def clean(value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = re.sub(r"^(?:我(?:要|想)?|请|帮我|规划)", "", value)
+        cleaned = re.sub(r"(?:出发|出发地)$", "", cleaned)
+        return cleaned.strip("，,。！？?：:") or None
+
+    origin = clean(origin)
+    destination = clean(destination)
+    city = (
+        "北京"
+        if "北京" in compact or any(alias in compact for alias in ("北交大", "北工大"))
+        else None
+    )
+    mode = (
+        "driving"
+        if any(token in compact for token in ("开车", "驾车", "自驾"))
+        else "walking"
+        if any(token in compact for token in ("步行", "走路"))
+        else "public_transit"
+    )
+    return {
+        "origin": origin,
+        "destination": destination,
+        "city": city,
+        "mode": mode,
+        "departure_time": None,
+    }
+
+
 def _query_dimensions(question: str) -> list[str]:
     dimensions = []
     mapping = (
         ("线路", "line"),
         ("各站", "station"),
         ("站点", "station"),
+        ("地铁站", "station"),
+        ("车站", "station"),
         ("方向", "direction"),
         ("小时", "time"),
         ("时段", "time"),
@@ -901,6 +1355,20 @@ def _query_dimensions(question: str) -> list[str]:
         if token in question and dimension not in dimensions:
             dimensions.append(dimension)
     return dimensions or ["station"]
+
+
+def _entity_inventory_dimension(question: str) -> str | None:
+    """Recognize entity inventories without relying on a pre-populated catalog."""
+
+    compact = question.lower().replace(" ", "")
+    inventory_markers = ("列出", "所有", "全部", "有哪些", "清单", "名单")
+    if not any(marker in compact for marker in inventory_markers):
+        return None
+    if any(token in compact for token in ("地铁站", "车站", "站点", "各站")):
+        return "station"
+    if any(token in compact for token in ("地铁线路", "轨道线路", "线路", "所有线")):
+        return "line"
+    return None
 
 
 def _needs_ranking(question: str) -> bool:

@@ -3,6 +3,10 @@ import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react-swc"
 import { defineConfig } from "vite"
 
+const apiProxy = process.env.METRO_API_PROXY || "http://127.0.0.1:8000"
+const apiProxyToken = process.env.METRO_API_PROXY_TOKEN
+const webPort = Number(process.env.METRO_WEB_PORT || "5173")
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
@@ -10,10 +14,15 @@ export default defineConfig({
   },
   server: {
     host: "0.0.0.0",
-    port: 5173,
+    port: webPort,
     proxy: {
-      "/api": "http://127.0.0.1:8000",
-      "/health": "http://127.0.0.1:8000",
+      "/api": {
+        target: apiProxy,
+        headers: apiProxyToken
+          ? { Authorization: `Bearer ${apiProxyToken}` }
+          : undefined,
+      },
+      "/health": apiProxy,
     },
   },
   build: {

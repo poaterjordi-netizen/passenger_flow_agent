@@ -24,6 +24,10 @@ The designated-day forecast copies the station inflow/outflow pattern from a ref
 
 Version 0.4 adds the governed assistant workflow: natural-language intent, a structured task graph, an allowlisted deterministic tool registry, Evidence Packets, response verification, replayable trajectories, six assistant API capabilities/routes, a Web intelligent-analysis page, and 100 end-to-end Gold Cases. Local and CI execution defaults to an offline `FakeProvider`; isolated Hermes Codex shadow and OpenAI-compatible adapters can use GPT-5.6-sol only when the corresponding runtime environment is explicitly configured.
 
+The current hardening layer adds server-created `AccessContext`, owner-isolated session/run/audit records, explicit QueryIR comparison and service-day semantics, completeness-aware ToolResult/EvidencePacket v2, exact global Top-N execution, deterministic intent/planner routing, model-data-egress policy, two-layer logical/physical source registries, and a blocked-by-default production promotion gate. The API now evaluates that gate at runtime and exposes a redacted `/api/v1/governance/status` contract; the Web client uses it to constrain sessions, queries, forecasts, evidence completeness, and provenance displays. Production-shadow Assistant and report export remain disabled unless separately approved.
+
+Natural-language requests now compile into `OperationIR` and match a versioned capability registry before planning. Entity/metric/date discovery, dataset summaries, endpoint-complete travel planning, and capability help use deterministic tools with explicit `CoverageEvidence` and zero model calls; complex data analysis continues to use GPT only for evidence-grounded synthesis. Meaningful open questions that do not map to a data tool use a one-call `general_answer` fallback with an explicit “no database rows / no live external data” boundary, while truly underspecified requests still clarify. Travel planning separates external places from metro database entities, serves sourced registered routes when available, and otherwise hands off to a live map without inventing a route. The Web UI exposes the selected operation, capability, answer policy, coverage scope, failure category, general-knowledge boundary, and clickable navigation/source links, while a local trace-clustering CLI turns repeated failures into regression candidates.
+
 The project still does **not** execute model-generated SQL, send notifications, schedule background reports, connect real camera/bus/GIS feeds, take automatic operating actions, or claim production prediction accuracy. Cross-network, event, real-time, SOP and geo paths use explicitly synthetic fixtures and remain behind later production and human gates.
 
 ## Quick start
@@ -55,7 +59,7 @@ Read-only database and forecast usage is documented in [`docs/database_and_forec
 ## WeChat Mini Program first version
 
 The repository now includes a native WeChat Mini Program under
-`clients/wechat-miniprogram/` and a synthetic-only FastAPI service under
+`clients/wechat-miniprogram/` and a synthetic-default FastAPI service under
 `src/metro_agent/api/`. The mobile client provides a dashboard, constrained
 QueryIR form, result charts and tables, designated-day baseline preview, audit
 summary, and runtime connection settings. It never connects directly to MySQL.
@@ -107,6 +111,17 @@ run `docker compose up --build` on a Docker-enabled host. It binds to
 testing, deployment boundaries, and the explicit production human gates.
 The provider contract, Phase 0–7 implementation matrix and evaluation commands
 are documented in [`docs/assistant_architecture.md`](docs/assistant_architecture.md).
+
+For the explicitly acknowledged local shadow path that uses a real read-only MySQL source and
+real GPT-5.6 Sol calls, prepare the external Keychain/TLS configuration described in
+[`docs/database_and_forecast.md`](docs/database_and_forecast.md), then run:
+
+```bash
+METRO_LOCAL_LIVE_SHADOW_ACKNOWLEDGED=true ./scripts/run_live_local.sh
+```
+
+The site opens at `http://127.0.0.1:5173`. It identifies this runtime as real-data local shadow,
+not as a production operational system.
 
 ## Engineering services
 

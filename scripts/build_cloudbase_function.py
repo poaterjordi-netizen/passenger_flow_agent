@@ -12,8 +12,10 @@ SOURCE = ROOT / "infra" / "cloudbase" / "functions" / "metroAgentApi"
 DEFAULT_TARGET = ROOT / "artifacts" / "cloudbase-function" / "metroAgentApi"
 PACKAGE_FILES = (
     Path("__init__.py"),
+    Path("access.py"),
     Path("contracts.py"),
     Path("query_engine.py"),
+    Path("source_registry.py"),
     Path("api/__init__.py"),
     Path("api/models.py"),
     Path("api/service.py"),

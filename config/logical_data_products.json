@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "registry_version": "2026-07-21.1",
+  "products": [
+    {
+      "logical_dataset": "fact_station_flow_actual",
+      "dataset_role": "actual",
+      "metric_ids": ["entries", "exits", "net_inflow"],
+      "dimensions": ["line", "station", "time"],
+      "time_basis": "event_time",
+      "timezone": "Asia/Shanghai",
+      "cross_midnight_policy": "reject",
+      "quality_gate_id": "station-flow-actual-quality-v1",
+      "access_policy_id": "station-flow-aggregate-read-v1",
+      "source_version_policy": "immutable-only"
+    }
+  ]
+}

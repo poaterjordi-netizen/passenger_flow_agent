@@ -62,6 +62,16 @@ def _metric_expression(metric_definition: dict[str, Any]) -> str:
 
 def _compile_query(query: dict[str, Any], registry: dict[str, dict[str, Any]]) -> QueryPlan:
     validate_query_ir(query, registry, "query")
+    if query.get("time_grain", "source") != "source":
+        raise ValueError("synthetic executor supports source time grain only")
+    if query.get("time_basis", "event_time") != "event_time":
+        raise ValueError("synthetic executor does not support service-day calendars")
+    if query.get("service_day") is not None or query.get("calendar_version") is not None:
+        raise ValueError("synthetic executor does not support service-day fields")
+    if query.get("data_as_of") is not None:
+        raise ValueError("synthetic executor does not support data_as_of")
+    if query.get("cross_midnight_policy", "reject") != "reject":
+        raise ValueError("synthetic executor does not support cross-midnight calendars")
     metric = query["metric"]
     dimensions = tuple(query["dimensions"])
     selected_dimensions = [
@@ -93,7 +103,13 @@ def _compile_query(query: dict[str, Any], registry: dict[str, dict[str, Any]]) -
     sql += f" WHERE {' AND '.join(predicates)}"
     if dimensions:
         group_columns = ", ".join(DIMENSION_COLUMNS[dimension] for dimension in dimensions)
-        sql += f" GROUP BY {group_columns} ORDER BY {group_columns}"
+        sql += f" GROUP BY {group_columns}"
+    order_by = query.get("order_by", [])
+    if order_by:
+        order_items = [f'"{item["field"]}" {item["direction"].upper()}' for item in order_by]
+        sql += f" ORDER BY {', '.join(order_items)}"
+    elif dimensions:
+        sql += f" ORDER BY {group_columns}"
     sql += " LIMIT ?"
     parameters.append(query["limit"])
     return QueryPlan(

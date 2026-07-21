@@ -1,0 +1,189 @@
+{
+  "schema_version": "1.0",
+  "registry_version": "2026-07-21.6",
+  "lexicon": {
+    "inventory_markers": ["列出", "所有", "全部", "有哪些", "清单", "名单", "给我看看", "给我"],
+    "entity_aliases": {
+      "station": ["地铁站", "车站", "站点", "各站"],
+      "line": ["地铁线路", "轨道线路", "线路", "所有线"],
+      "direction": ["方向", "上下行"],
+      "date": ["日期", "时间范围", "哪些天", "哪几天"],
+      "metric": ["指标", "度量", "口径"]
+    },
+    "list_metric_phrases": ["有哪些指标", "所有指标", "指标清单", "能查什么", "可查询指标"],
+    "list_date_phrases": ["有哪些日期", "所有日期", "数据日期", "覆盖哪些日期", "时间覆盖范围", "哪几天有数据"],
+    "summarize_dataset_phrases": ["数据库基本情况", "数据基本情况", "数据概况", "数据范围", "有什么数据", "数据质量", "数据集摘要"],
+    "describe_markers": ["介绍", "描述", "基本情况", "详细信息", "是什么"],
+    "ranking_markers": ["前三", "前五", "top", "排序", "最高", "最低", "最多", "最少", "最集中", "贡献", "峰值"],
+    "travel_markers": ["出行", "出现规划", "路线", "线路规划", "怎么走", "如何去", "怎么去", "前往", "到达", "导航"],
+    "help_phrases": ["你能做什么", "可以做什么", "支持哪些问题", "能回答什么", "可以问什么", "如何使用", "使用帮助", "能力清单", "功能清单"],
+    "high_confidence_markers": ["查询", "客流", "进站", "出站", "换乘", "净流入", "比较", "对比", "同比", "环比", "趋势", "预测", "预警", "实时", "异常", "热力", "相关", "原因", "报告", "日报", "出行", "出现规划", "路线", "怎么走", "怎么去", "只看", "再和", "改成"]
+  },
+  "capabilities": [
+    {
+      "id": "entity_inventory",
+      "operations": ["list_entities"],
+      "tools": ["list_observed_entities"],
+      "entity_types": ["station", "line"],
+      "data_scopes": ["synthetic", "production-shadow", "production-readonly"],
+      "required_slots": ["entity_type", "time_range"],
+      "optional_slots": ["filters"],
+      "completeness_policy": "reject_if_truncated",
+      "answer_policy": "deterministic_table"
+    },
+    {
+      "id": "metric_catalog",
+      "operations": ["list_metrics"],
+      "tools": ["list_metrics"],
+      "entity_types": ["metric"],
+      "data_scopes": ["synthetic", "production-shadow", "production-readonly"],
+      "required_slots": [],
+      "optional_slots": [],
+      "completeness_policy": "require_complete",
+      "answer_policy": "deterministic_table"
+    },
+    {
+      "id": "date_catalog",
+      "operations": ["list_available_dates"],
+      "tools": ["list_available_dates"],
+      "entity_types": ["date"],
+      "data_scopes": ["synthetic", "production-shadow", "production-readonly"],
+      "required_slots": [],
+      "optional_slots": [],
+      "completeness_policy": "require_complete",
+      "answer_policy": "deterministic_table"
+    },
+    {
+      "id": "data_scope_summary",
+      "operations": ["summarize_dataset"],
+      "tools": ["describe_data_scope"],
+      "entity_types": [],
+      "data_scopes": ["synthetic", "production-shadow", "production-readonly"],
+      "required_slots": [],
+      "optional_slots": [],
+      "completeness_policy": "require_complete",
+      "answer_policy": "deterministic_summary"
+    },
+    {
+      "id": "entity_description",
+      "operations": ["describe_entity"],
+      "tools": ["describe_observed_entity"],
+      "entity_types": ["station", "line"],
+      "data_scopes": ["synthetic", "production-shadow", "production-readonly"],
+      "required_slots": ["entity_type", "target_query", "time_range"],
+      "optional_slots": [],
+      "completeness_policy": "require_complete",
+      "answer_policy": "deterministic_summary"
+    },
+    {
+      "id": "metric_query",
+      "operations": ["query_metric"],
+      "tools": ["query_metric", "query_ticket_flow", "rank_stations"],
+      "entity_types": [],
+      "data_scopes": ["synthetic", "production-shadow", "production-readonly"],
+      "required_slots": ["metric", "time_range"],
+      "optional_slots": ["filters"],
+      "completeness_policy": "require_complete",
+      "answer_policy": "llm_synthesis"
+    },
+    {
+      "id": "entity_ranking",
+      "operations": ["rank_entities"],
+      "tools": ["query_metric", "query_ticket_flow", "rank_stations"],
+      "entity_types": ["station", "line"],
+      "data_scopes": ["synthetic", "production-shadow", "production-readonly"],
+      "required_slots": ["metric", "time_range"],
+      "optional_slots": ["entity_type", "filters"],
+      "completeness_policy": "reject_if_truncated",
+      "answer_policy": "llm_synthesis"
+    },
+    {
+      "id": "period_comparison",
+      "operations": ["compare_periods"],
+      "tools": ["query_metric", "compare_metric_periods", "compare_groups", "get_operational_indicators", "calculate_correlation"],
+      "entity_types": [],
+      "data_scopes": ["synthetic", "production-shadow", "production-readonly"],
+      "required_slots": ["metric", "time_range"],
+      "optional_slots": ["filters"],
+      "completeness_policy": "require_complete",
+      "answer_policy": "llm_synthesis"
+    },
+    {
+      "id": "forecast_synthetic",
+      "operations": ["forecast"],
+      "tools": ["find_similar_historical_days", "run_reference_day_forecast", "run_event_forecast", "compare_forecast_with_baseline", "search_operating_sop"],
+      "entity_types": [],
+      "data_scopes": ["synthetic"],
+      "required_slots": ["time_range"],
+      "optional_slots": ["target_query"],
+      "completeness_policy": "require_complete",
+      "answer_policy": "llm_synthesis"
+    },
+    {
+      "id": "forecast_readiness",
+      "operations": ["forecast"],
+      "tools": ["query_metric", "get_data_quality_status", "assess_event_forecast_readiness"],
+      "entity_types": [],
+      "data_scopes": ["production-shadow", "production-readonly"],
+      "required_slots": ["time_range"],
+      "optional_slots": ["target_query"],
+      "completeness_policy": "require_complete",
+      "answer_policy": "llm_synthesis"
+    },
+    {
+      "id": "synthetic_extended_analysis",
+      "operations": ["alert", "transfer", "geo", "correlation", "diagnosis", "trend_analysis", "report"],
+      "tools": ["query_metric", "query_rail_transactions", "query_bus_transactions", "match_transfer_records", "calculate_transfer_flow", "geocode_stations", "aggregate_flow_by_region", "build_od_heatmap", "build_commuting_profile", "get_operational_indicators", "calculate_correlation", "calculate_lagged_correlation", "diagnose_flow_change", "decompose_time_series", "run_time_series_forecast", "backtest_time_series", "detect_anomalies", "get_alert_thresholds", "search_operating_sop", "build_action_candidates", "build_daily_report", "compare_metric_periods"],
+      "entity_types": [],
+      "data_scopes": ["synthetic"],
+      "required_slots": [],
+      "optional_slots": ["metric", "time_range", "filters"],
+      "completeness_policy": "require_complete",
+      "answer_policy": "llm_synthesis"
+    },
+    {
+      "id": "production_capability_readiness",
+      "operations": ["alert", "transfer", "geo", "correlation", "diagnosis", "trend_analysis", "report", "capability_readiness"],
+      "tools": ["get_data_quality_status", "assess_task_readiness"],
+      "entity_types": [],
+      "data_scopes": ["production-shadow", "production-readonly"],
+      "required_slots": [],
+      "optional_slots": ["metric", "time_range", "filters"],
+      "completeness_policy": "require_complete",
+      "answer_policy": "deterministic_summary"
+    },
+    {
+      "id": "travel_planning",
+      "operations": ["travel_plan"],
+      "tools": ["plan_public_transit_route"],
+      "entity_types": [],
+      "data_scopes": ["synthetic", "production-shadow", "production-readonly"],
+      "required_slots": ["origin", "destination"],
+      "optional_slots": ["travel_mode", "departure_time"],
+      "completeness_policy": "require_complete",
+      "answer_policy": "deterministic_summary"
+    },
+    {
+      "id": "assistant_capability_help",
+      "operations": ["capability_help"],
+      "tools": ["describe_assistant_capabilities"],
+      "entity_types": [],
+      "data_scopes": ["synthetic", "production-shadow", "production-readonly"],
+      "required_slots": [],
+      "optional_slots": [],
+      "completeness_policy": "require_complete",
+      "answer_policy": "deterministic_summary"
+    },
+    {
+      "id": "general_question_answering",
+      "operations": ["general_answer"],
+      "tools": ["prepare_general_context"],
+      "entity_types": [],
+      "data_scopes": ["synthetic", "production-shadow", "production-readonly"],
+      "required_slots": ["target_query"],
+      "optional_slots": [],
+      "completeness_policy": "require_complete",
+      "answer_policy": "llm_general"
+    }
+  ]
+}

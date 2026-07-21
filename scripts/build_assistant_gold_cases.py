@@ -114,6 +114,7 @@ def main() -> int:
         parameter: dict | None = None,
         human_gate: bool = False,
         non_causal: bool = False,
+        expected_status: str = "completed",
     ) -> None:
         case = {
             "case_id": f"assistant-{len(cases) + 1:03d}",
@@ -121,19 +122,23 @@ def main() -> int:
             "question": question,
             "expected_task_type": task_type,
             "expected_tools": tools,
-            "expected_status": "completed",
+            "expected_status": expected_status,
             "expected_evidence_kinds": evidence_kinds,
-            "required_states": [
-                "RECEIVE",
-                "UNDERSTAND",
-                "CLARIFY",
-                "PLAN",
-                "EXECUTE_TOOLS",
-                "OBSERVE",
-                "SYNTHESIZE",
-                "VERIFY",
-                "RESPOND",
-            ],
+            "required_states": (
+                ["RECEIVE", "UNDERSTAND", "CLARIFY"]
+                if expected_status == "needs_clarification"
+                else [
+                    "RECEIVE",
+                    "UNDERSTAND",
+                    "CLARIFY",
+                    "PLAN",
+                    "EXECUTE_TOOLS",
+                    "OBSERVE",
+                    "SYNTHESIZE",
+                    "VERIFY",
+                    "RESPOND",
+                ]
+            ),
             "artifact_required": artifact_required,
             "human_gate": human_gate,
             "non_causal": non_causal,
@@ -156,7 +161,15 @@ def main() -> int:
                 tools.extend(["get_operational_indicators", "calculate_correlation"])
         else:
             tools = ["compare_metric_periods"]
-        add("multi_compare", "compare", question, tools, evidence_kinds=["fact"])
+        relative_unavailable = "环比" in question or "同比" in question
+        add(
+            "multi_compare",
+            "compare",
+            question,
+            [] if relative_unavailable else tools,
+            evidence_kinds=[] if relative_unavailable else ["fact"],
+            expected_status=("needs_clarification" if relative_unavailable else "completed"),
+        )
 
     for attendance in range(10_000, 110_000, 10_000):
         question = f"奥体中心有 {attendance // 10_000} 万人演唱会，预测附近站点客流并给出建议"
@@ -193,7 +206,7 @@ def main() -> int:
 
     for report_name in (
         "昨日全线网日报",
-        "早高峰日报",
+        "上午客流日报",
         "晚高峰日报",
         "异常站点日报",
         "运营客流日报",
@@ -201,7 +214,7 @@ def main() -> int:
         add(
             "scheduled_report",
             "report",
-            f"生成{report_name}，与上期比较并找出异常",
+            f"生成{report_name}，比较前后两个受控时段并找出异常",
             ["query_metric", "compare_metric_periods", "detect_anomalies", "build_daily_report"],
             evidence_kinds=["fact", "statistic"],
             artifact_required=True,

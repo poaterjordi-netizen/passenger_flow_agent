@@ -1,5 +1,10 @@
 # Metric dictionary
 
+The machine registry now carries semantic metadata in addition to deterministic source fields:
+version, label, definition, logical dataset, data role, allowed grains, missing-value policy,
+quality gate, access policy, and admission status. The synthetic engine still executes every
+registered metric, while production-shadow admits only an explicit subset after source approval.
+
 Canonical machine-readable definitions live in `examples/synthetic_data/metrics.json`.
 
 | Metric | Meaning | Aggregation | Unit | Allowed dimensions |

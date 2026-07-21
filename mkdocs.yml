@@ -15,6 +15,7 @@ theme:
 
 nav:
   - 项目总览: index.md
+  - 迭代进展: progress_since_02992ee.md
   - 用户使用:
       - 快速开始: quickstart_cn.md
       - 使用指南: user_guide_cn.md
@@ -28,6 +29,7 @@ nav:
       - 数据契约: data_contract.md
       - 指标字典: metric_dictionary.md
       - 威胁模型: threat_model.md
+      - Hermes 批评复核与修正: hermes_critique_resolution_20260721.md
   - 合作开发:
       - 项目结构: project_structure_cn.md
       - 开发者指南: developer_guide_cn.md

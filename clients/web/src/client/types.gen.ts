@@ -36,9 +36,13 @@ export type AssistantCapabilities = {
      */
     architecture: Array<AssistantArchitectureStage>;
     /**
+     * Capability Registry Version
+     */
+    capability_registry_version: string;
+    /**
      * Data Scope
      */
-    data_scope: 'synthetic';
+    data_scope: 'synthetic' | 'production-shadow' | 'production-readonly';
     /**
      * Deterministic Controls
      */
@@ -51,6 +55,12 @@ export type AssistantCapabilities = {
      * Model Responsibilities
      */
     model_responsibilities: Array<string>;
+    /**
+     * Operation Capabilities
+     */
+    operation_capabilities?: Array<{
+        [key: string]: unknown;
+    }>;
     /**
      * Production Gaps
      */
@@ -150,6 +160,44 @@ export type AuditSummary = {
 };
 
 /**
+ * CapabilityMatch
+ */
+export type CapabilityMatch = {
+    /**
+     * Answer Policy
+     */
+    answer_policy: 'deterministic_table' | 'deterministic_summary' | 'llm_synthesis' | 'llm_general';
+    /**
+     * Capability Id
+     */
+    capability_id?: string | null;
+    /**
+     * Completeness Policy
+     */
+    completeness_policy?: 'require_complete' | 'reject_if_truncated';
+    /**
+     * Missing Slots
+     */
+    missing_slots?: Array<string>;
+    /**
+     * Registry Version
+     */
+    registry_version: string;
+    /**
+     * Status
+     */
+    status: 'matched' | 'missing_slots' | 'unavailable';
+    /**
+     * Tools
+     */
+    tools?: Array<string>;
+    /**
+     * Unavailable Tools
+     */
+    unavailable_tools?: Array<string>;
+};
+
+/**
  * CatalogOption
  */
 export type CatalogOption = {
@@ -168,13 +216,21 @@ export type CatalogOption = {
  */
 export type CatalogResponse = {
     /**
+     * Access Policy
+     */
+    access_policy?: string | null;
+    /**
      * Available Dates
      */
     available_dates: Array<string>;
     /**
+     * City
+     */
+    city?: string | null;
+    /**
      * Data Scope
      */
-    data_scope: 'synthetic';
+    data_scope: 'synthetic' | 'production-shadow' | 'production-readonly';
     default_time_range: TimeRange;
     /**
      * Dimensions
@@ -185,13 +241,61 @@ export type CatalogResponse = {
      */
     directions: Array<CatalogOption>;
     /**
+     * Freshness Status
+     */
+    freshness_status?: 'fresh' | 'stale' | 'unknown' | 'not_applicable';
+    /**
      * Lines
      */
     lines: Array<string>;
     /**
+     * Logical Registry Hash
+     */
+    logical_registry_hash?: string | null;
+    /**
+     * Logical Registry Version
+     */
+    logical_registry_version?: string | null;
+    /**
      * Metrics
      */
     metrics: Array<MetricCatalogItem>;
+    /**
+     * Physical Mapping Hash
+     */
+    physical_mapping_hash?: string | null;
+    /**
+     * Physical Mapping Version
+     */
+    physical_mapping_version?: string | null;
+    /**
+     * Quality Gate
+     */
+    quality_gate?: string | null;
+    /**
+     * Quality Gate Evaluated At
+     */
+    quality_gate_evaluated_at?: string | null;
+    /**
+     * Quality Status
+     */
+    quality_status?: 'pass' | 'warning' | 'blocked' | 'unknown';
+    /**
+     * Registration Quality Status
+     */
+    registration_quality_status?: 'pass' | 'warning' | 'blocked' | 'unknown';
+    /**
+     * Registration Status
+     */
+    registration_status?: 'approved' | 'candidate' | 'blocked' | 'unknown';
+    /**
+     * Runtime Quality Status
+     */
+    runtime_quality_status?: 'pass' | 'warning' | 'blocked' | 'unknown';
+    /**
+     * Source Version
+     */
+    source_version?: string | null;
     /**
      * Stations
      */
@@ -200,6 +304,74 @@ export type CatalogResponse = {
      * Timezone
      */
     timezone: 'Asia/Shanghai';
+};
+
+/**
+ * ComparisonPeriods
+ */
+export type ComparisonPeriods = {
+    baseline: TimeRange;
+    comparison: TimeRange;
+    /**
+     * Relation
+     */
+    relation?: 'explicit' | 'previous_period' | 'year_over_year';
+};
+
+/**
+ * CoverageEvidence
+ */
+export type CoverageEvidence = {
+    /**
+     * Authoritative Master
+     */
+    authoritative_master?: boolean;
+    /**
+     * City
+     */
+    city?: string | null;
+    /**
+     * Complete
+     */
+    complete?: boolean;
+    /**
+     * Coverage Type
+     */
+    coverage_type?: 'unknown' | 'observed_window' | 'registered_catalog' | 'query_result' | 'derived_result' | 'capability_readiness' | 'external_navigation' | 'general_context';
+    /**
+     * Dataset Role
+     */
+    dataset_role?: 'actual' | 'reference' | 'forecast' | null;
+    /**
+     * Freshness Status
+     */
+    freshness_status?: string | null;
+    /**
+     * Matched Count
+     */
+    matched_count?: number | null;
+    /**
+     * Returned Count
+     */
+    returned_count?: number;
+    /**
+     * Scope Label
+     */
+    scope_label?: string;
+    /**
+     * Source Version
+     */
+    source_version?: string | null;
+    /**
+     * Time Range
+     */
+    time_range?: {
+        [key: string]: string;
+    };
+    /**
+     * Truncated
+     */
+    truncated?: boolean;
 };
 
 /**
@@ -277,9 +449,26 @@ export type EventSpec = {
  */
 export type EvidenceItem = {
     /**
+     * Access Scope Hash
+     */
+    access_scope_hash?: string | null;
+    /**
+     * Block Reason
+     */
+    block_reason?: string | null;
+    /**
+     * Calculation Method
+     */
+    calculation_method?: string | null;
+    /**
      * Claim
      */
     claim: string;
+    /**
+     * Complete
+     */
+    complete?: boolean;
+    coverage?: CoverageEvidence;
     /**
      * Evidence Id
      */
@@ -289,13 +478,67 @@ export type EvidenceItem = {
      */
     kind: 'fact' | 'statistic' | 'chart' | 'model_output' | 'knowledge';
     /**
+     * Logical Plan Hash
+     */
+    logical_plan_hash?: string | null;
+    /**
+     * Matched Count Unknown
+     */
+    matched_count_unknown?: boolean;
+    /**
+     * Matched Row Count
+     */
+    matched_row_count?: number | null;
+    /**
+     * Metadata
+     */
+    metadata?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Policy Snapshot Id
+     */
+    policy_snapshot_id?: string | null;
+    /**
+     * Query Fingerprint
+     */
+    query_fingerprint?: string | null;
+    /**
+     * Result Hash
+     */
+    result_hash?: string | null;
+    /**
+     * Result Schema
+     */
+    result_schema?: Array<ResultFieldSpec>;
+    /**
+     * Returned Row Count
+     */
+    returned_row_count?: number;
+    /**
+     * Source Evidence Ids
+     */
+    source_evidence_ids?: Array<string>;
+    /**
      * Step Id
      */
     step_id: string;
     /**
+     * Structured Claims
+     */
+    structured_claims?: Array<StructuredClaim>;
+    /**
+     * Truncated
+     */
+    truncated?: boolean;
+    /**
      * Value
      */
     value?: unknown;
+    /**
+     * Warnings
+     */
+    warnings?: Array<string>;
 };
 
 /**
@@ -330,6 +573,10 @@ export type EvidencePacket = {
      * Question
      */
     question: string;
+    /**
+     * Schema Version
+     */
+    schema_version?: '2.0';
     /**
      * Statistics
      */
@@ -396,6 +643,258 @@ export type ForecastResponse = {
 };
 
 /**
+ * GovernanceAccessScope
+ */
+export type GovernanceAccessScope = {
+    /**
+     * Access Scope Hash
+     */
+    access_scope_hash: string;
+    /**
+     * Allowed Cities
+     */
+    allowed_cities: Array<string>;
+    /**
+     * Allowed Dataset Roles
+     */
+    allowed_dataset_roles: Array<'actual' | 'reference' | 'forecast'>;
+    /**
+     * Allowed Metrics
+     */
+    allowed_metrics: Array<string>;
+    /**
+     * Export Policy
+     */
+    export_policy: 'deny' | 'controlled';
+    /**
+     * Max Time Range Hours
+     */
+    max_time_range_hours: number;
+    /**
+     * Policy Snapshot Id
+     */
+    policy_snapshot_id: string;
+    /**
+     * Row Limit
+     */
+    row_limit: number;
+};
+
+/**
+ * GovernanceDataSource
+ */
+export type GovernanceDataSource = {
+    /**
+     * Access Policy
+     */
+    access_policy?: string | null;
+    /**
+     * City
+     */
+    city?: string | null;
+    /**
+     * Freshness Status
+     */
+    freshness_status: 'fresh' | 'stale' | 'unknown' | 'not_applicable';
+    /**
+     * Logical Registry Hash
+     */
+    logical_registry_hash?: string | null;
+    /**
+     * Logical Registry Version
+     */
+    logical_registry_version?: string | null;
+    /**
+     * Physical Mapping Hash
+     */
+    physical_mapping_hash?: string | null;
+    /**
+     * Physical Mapping Version
+     */
+    physical_mapping_version?: string | null;
+    /**
+     * Quality Gate
+     */
+    quality_gate?: string | null;
+    /**
+     * Quality Gate Evaluated At
+     */
+    quality_gate_evaluated_at?: string | null;
+    /**
+     * Quality Status
+     */
+    quality_status: 'pass' | 'warning' | 'blocked' | 'unknown';
+    /**
+     * Registration Quality Status
+     */
+    registration_quality_status: 'pass' | 'warning' | 'blocked' | 'unknown';
+    /**
+     * Registration Status
+     */
+    registration_status: 'approved' | 'candidate' | 'blocked' | 'unknown';
+    /**
+     * Runtime Quality Status
+     */
+    runtime_quality_status: 'pass' | 'warning' | 'blocked' | 'unknown';
+    /**
+     * Source Version
+     */
+    source_version?: string | null;
+};
+
+/**
+ * GovernanceIdentity
+ */
+export type GovernanceIdentity = {
+    /**
+     * Identity Adapter
+     */
+    identity_adapter: 'static-token-single-subject';
+    /**
+     * Multi User Isolation
+     */
+    multi_user_isolation: boolean;
+    /**
+     * Roles
+     */
+    roles: Array<string>;
+    /**
+     * Subject Id
+     */
+    subject_id: string;
+    /**
+     * Tenant Or Department
+     */
+    tenant_or_department: string;
+};
+
+/**
+ * GovernanceModelPolicy
+ */
+export type GovernanceModelPolicy = {
+    /**
+     * Active Model
+     */
+    active_model?: string | null;
+    /**
+     * Active Provider
+     */
+    active_provider: string;
+    /**
+     * Data Egress
+     */
+    data_egress: 'deny' | 'synthetic-only' | 'aggregate-approved';
+    /**
+     * Endpoint Binding Verified
+     */
+    endpoint_binding_verified: boolean;
+    /**
+     * Endpoint Policy Id
+     */
+    endpoint_policy_id: string;
+    /**
+     * Endpoint Target Hash
+     */
+    endpoint_target_hash: string;
+    /**
+     * Evidence Egress Allowed
+     */
+    evidence_egress_allowed: boolean;
+    /**
+     * Intent Egress
+     */
+    intent_egress: 'deny' | 'synthetic-only' | 'metadata-approved';
+    /**
+     * Intent Egress Allowed
+     */
+    intent_egress_allowed: boolean;
+};
+
+/**
+ * GovernancePromotionGate
+ */
+export type GovernancePromotionGate = {
+    /**
+     * Blockers
+     */
+    blockers: Array<string>;
+    /**
+     * Configured Status
+     */
+    configured_status: string;
+    /**
+     * Enforced
+     */
+    enforced: boolean;
+    /**
+     * Gate Id
+     */
+    gate_id: string;
+    /**
+     * Local Live Shadow Acknowledged
+     */
+    local_live_shadow_acknowledged: boolean;
+    /**
+     * Missing Owner Roles
+     */
+    missing_owner_roles: Array<string>;
+    /**
+     * Missing Thresholds
+     */
+    missing_thresholds: Array<string>;
+    /**
+     * Pending Artifacts
+     */
+    pending_artifacts: Array<string>;
+    /**
+     * Ready
+     */
+    ready: boolean;
+    /**
+     * Runtime Flag Requested
+     */
+    runtime_flag_requested: boolean;
+};
+
+/**
+ * GovernanceStatus
+ */
+export type GovernanceStatus = {
+    access_scope: GovernanceAccessScope;
+    /**
+     * Assistant Enabled
+     */
+    assistant_enabled: boolean;
+    /**
+     * Assistant Status
+     */
+    assistant_status: 'synthetic_baseline' | 'disabled_by_runtime_flag' | 'blocked_by_promotion_gate' | 'enabled_for_local_shadow' | 'enabled_after_promotion';
+    /**
+     * Data Scope
+     */
+    data_scope: 'synthetic' | 'production-shadow' | 'production-readonly';
+    data_source: GovernanceDataSource;
+    identity: GovernanceIdentity;
+    model_policy: GovernanceModelPolicy;
+    promotion: GovernancePromotionGate;
+    tool_registry: GovernanceToolRegistry;
+};
+
+/**
+ * GovernanceToolRegistry
+ */
+export type GovernanceToolRegistry = {
+    /**
+     * Registered Tools
+     */
+    registered_tools: Array<string>;
+    /**
+     * Tool Count
+     */
+    tool_count: number;
+};
+
+/**
  * HTTPValidationError
  */
 export type HttpValidationError = {
@@ -412,7 +911,11 @@ export type HealthResponse = {
     /**
      * Data Scope
      */
-    data_scope: 'synthetic';
+    data_scope: 'synthetic' | 'production-shadow' | 'production-readonly';
+    /**
+     * Data Status
+     */
+    data_status?: 'synthetic-ready' | 'shadow-configured';
     /**
      * Environment
      */
@@ -472,8 +975,20 @@ export type IntentEnvelope = {
      * Ambiguities
      */
     ambiguities?: Array<string>;
+    /**
+     * City
+     */
+    city?: string | null;
+    /**
+     * Dataset Role
+     */
+    dataset_role?: 'actual' | 'reference' | 'forecast';
     entities?: EntitySet;
     event_spec?: EventSpec | null;
+    /**
+     * Metric Version
+     */
+    metric_version?: string;
     /**
      * Metrics
      */
@@ -483,9 +998,17 @@ export type IntentEnvelope = {
      */
     needs_clarification?: boolean;
     /**
+     * Source Version
+     */
+    source_version?: string | null;
+    /**
      * Task Type
      */
-    task_type: 'query' | 'compare' | 'forecast' | 'alert' | 'transfer' | 'geo' | 'correlation' | 'diagnosis' | 'trend' | 'report';
+    task_type: 'query' | 'compare' | 'forecast' | 'alert' | 'transfer' | 'geo' | 'correlation' | 'diagnosis' | 'trend' | 'report' | 'travel' | 'help' | 'general';
+    /**
+     * Time Grain
+     */
+    time_grain?: 'source' | '10m' | '15m' | '30m' | 'hour' | 'day';
     /**
      * Time Scope
      */
@@ -493,6 +1016,7 @@ export type IntentEnvelope = {
         [key: string]: unknown;
     };
     transfer_spec?: TransferAnalysisSpec | null;
+    travel_spec?: TravelPlanSpec | null;
     /**
      * User Goal
      */
@@ -503,6 +1027,22 @@ export type IntentEnvelope = {
  * MetricCatalogItem
  */
 export type MetricCatalogItem = {
+    /**
+     * Admission Status
+     */
+    admission_status?: 'approved' | 'candidate' | 'synthetic_only' | 'blocked';
+    /**
+     * Allowed Grains
+     */
+    allowed_grains?: Array<string>;
+    /**
+     * Dataset Role
+     */
+    dataset_role?: 'actual' | 'reference' | 'forecast';
+    /**
+     * Definition
+     */
+    definition?: string;
     /**
      * Dimensions
      */
@@ -516,9 +1056,75 @@ export type MetricCatalogItem = {
      */
     label: string;
     /**
+     * Logical Dataset
+     */
+    logical_dataset?: string;
+    /**
      * Unit
      */
     unit: string;
+    /**
+     * Version
+     */
+    version?: string;
+};
+
+/**
+ * ModelEgressRecord
+ */
+export type ModelEgressRecord = {
+    /**
+     * Call Id
+     */
+    call_id: string;
+    /**
+     * Completed At
+     */
+    completed_at?: string | null;
+    /**
+     * Decision
+     */
+    decision: 'denied' | 'approved';
+    /**
+     * Endpoint Binding Verified
+     */
+    endpoint_binding_verified: boolean;
+    /**
+     * Endpoint Policy Id
+     */
+    endpoint_policy_id: string;
+    /**
+     * Endpoint Target Hash
+     */
+    endpoint_target_hash: string;
+    /**
+     * Exact Payload Hash
+     */
+    exact_payload_hash: string;
+    /**
+     * Model
+     */
+    model?: string | null;
+    /**
+     * Outbound Field Paths
+     */
+    outbound_field_paths?: Array<string>;
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * Purpose
+     */
+    purpose: 'intent_candidate' | 'synthesis';
+    /**
+     * Started At
+     */
+    started_at: string;
+    /**
+     * Status
+     */
+    status: 'started' | 'succeeded' | 'failed' | 'not_called';
 };
 
 /**
@@ -588,6 +1194,76 @@ export type ModelRuntime = {
 };
 
 /**
+ * OperationIR
+ */
+export type OperationIr = {
+    /**
+     * Answer Policy
+     */
+    answer_policy?: 'deterministic_table' | 'deterministic_summary' | 'llm_synthesis' | 'llm_general';
+    /**
+     * Completeness Required
+     */
+    completeness_required?: boolean;
+    /**
+     * Departure Time
+     */
+    departure_time?: string | null;
+    /**
+     * Destination
+     */
+    destination?: string | null;
+    /**
+     * Entity Type
+     */
+    entity_type?: 'station' | 'line' | 'direction' | 'date' | 'metric' | null;
+    /**
+     * Filters
+     */
+    filters?: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Metric
+     */
+    metric?: string | null;
+    /**
+     * Operation
+     */
+    operation: 'list_entities' | 'describe_entity' | 'list_metrics' | 'list_available_dates' | 'summarize_dataset' | 'query_metric' | 'rank_entities' | 'compare_periods' | 'forecast' | 'alert' | 'transfer' | 'geo' | 'correlation' | 'diagnosis' | 'trend_analysis' | 'report' | 'capability_readiness' | 'travel_plan' | 'capability_help' | 'general_answer';
+    /**
+     * Origin
+     */
+    origin?: string | null;
+    /**
+     * Route Confidence
+     */
+    route_confidence?: 'high' | 'model_candidate';
+    /**
+     * Schema Version
+     */
+    schema_version?: '1.0';
+    /**
+     * Scope
+     */
+    scope?: 'approved_observation_window' | 'registered_catalog' | 'authoritative_master' | 'requested_query_scope' | 'external_navigation' | 'general_knowledge';
+    /**
+     * Target Query
+     */
+    target_query?: string | null;
+    /**
+     * Time Range
+     */
+    time_range?: {
+        [key: string]: string;
+    };
+    /**
+     * Travel Mode
+     */
+    travel_mode?: 'public_transit' | 'driving' | 'walking' | null;
+};
+
+/**
  * QueryFilter
  */
 export type QueryFilter = {
@@ -606,9 +1282,44 @@ export type QueryFilter = {
 };
 
 /**
+ * QueryOrder
+ */
+export type QueryOrder = {
+    /**
+     * Direction
+     */
+    direction?: 'asc' | 'desc';
+    /**
+     * Field
+     */
+    field: string;
+};
+
+/**
  * QueryRequest
  */
 export type QueryRequest = {
+    /**
+     * Calendar Version
+     */
+    calendar_version?: string | null;
+    /**
+     * City
+     */
+    city?: string | null;
+    comparison_periods?: ComparisonPeriods | null;
+    /**
+     * Cross Midnight Policy
+     */
+    cross_midnight_policy?: 'reject' | 'service_day_calendar';
+    /**
+     * Data As Of
+     */
+    data_as_of?: string | null;
+    /**
+     * Dataset Role
+     */
+    dataset_role?: 'actual' | 'reference' | 'forecast';
     /**
      * Dimensions
      */
@@ -625,7 +1336,35 @@ export type QueryRequest = {
      * Metric
      */
     metric: string;
+    /**
+     * Metric Version
+     */
+    metric_version?: string;
+    /**
+     * Order By
+     */
+    order_by?: Array<QueryOrder>;
+    /**
+     * Service Day
+     */
+    service_day?: string | null;
+    /**
+     * Source Version
+     */
+    source_version?: string | null;
+    /**
+     * Time Basis
+     */
+    time_basis?: 'event_time' | 'service_day';
+    /**
+     * Time Grain
+     */
+    time_grain?: 'source' | '10m' | '15m' | '30m' | 'hour' | 'day';
     time_range: TimeRange;
+    /**
+     * Timezone
+     */
+    timezone?: 'Asia/Shanghai';
 };
 
 /**
@@ -634,6 +1373,10 @@ export type QueryRequest = {
 export type QueryResponse = {
     audit: AuditSummary;
     /**
+     * Data Scope
+     */
+    data_scope?: 'synthetic' | 'production-shadow' | 'production-readonly';
+    /**
      * Dimensions
      */
     dimensions: Array<string>;
@@ -641,6 +1384,12 @@ export type QueryResponse = {
      * Metric
      */
     metric: string;
+    /**
+     * Provenance
+     */
+    provenance?: {
+        [key: string]: unknown;
+    };
     /**
      * Row Count
      */
@@ -658,10 +1407,29 @@ export type QueryResponse = {
 };
 
 /**
+ * ResultFieldSpec
+ */
+export type ResultFieldSpec = {
+    /**
+     * Field
+     */
+    field: string;
+    /**
+     * Type
+     */
+    type: 'boolean' | 'integer' | 'number' | 'null' | 'string';
+};
+
+/**
  * RunRecord
  */
 export type RunRecord = {
+    /**
+     * Access Scope Hash
+     */
+    access_scope_hash: string;
     adopted_response?: AssistantResponse | null;
+    capability_match?: CapabilityMatch | null;
     /**
      * Created At
      */
@@ -675,16 +1443,45 @@ export type RunRecord = {
     }>;
     evidence?: EvidencePacket | null;
     /**
+     * Failure Category
+     */
+    failure_category?: 'material_ambiguity' | 'intent_unrecognized' | 'entity_not_found' | 'capability_gap' | 'query_ir_unsupported' | 'data_unavailable' | 'result_truncated' | 'tool_failure' | 'model_failure' | 'verification_failure' | 'authorization_failure' | null;
+    /**
      * Human Feedback
      */
     human_feedback?: Array<HumanFeedback>;
     intent?: IntentEnvelope | null;
+    /**
+     * Intent Route
+     */
+    intent_route?: 'deterministic' | 'model_candidate' | 'clarification';
+    /**
+     * Model Egress
+     */
+    model_egress?: Array<ModelEgressRecord>;
     model_runtime?: ModelRuntime;
+    operation_ir?: OperationIr | null;
     /**
      * Original Question
      */
     original_question: string;
+    /**
+     * Owner Subject Id
+     */
+    owner_subject_id: string;
+    /**
+     * Owner Tenant Or Department
+     */
+    owner_tenant_or_department: string;
     plan?: TaskPlan | null;
+    /**
+     * Planner Route
+     */
+    planner_route?: 'deterministic';
+    /**
+     * Policy Snapshot Id
+     */
+    policy_snapshot_id: string;
     /**
      * Provider
      */
@@ -724,6 +1521,10 @@ export type RunRecord = {
  */
 export type SessionRecord = {
     /**
+     * Access Scope Hash
+     */
+    access_scope_hash: string;
+    /**
      * Created At
      */
     created_at: string;
@@ -734,9 +1535,63 @@ export type SessionRecord = {
         [key: string]: string;
     }>;
     /**
+     * Owner Subject Id
+     */
+    owner_subject_id: string;
+    /**
+     * Owner Tenant Or Department
+     */
+    owner_tenant_or_department: string;
+    /**
+     * Policy Snapshot Id
+     */
+    policy_snapshot_id: string;
+    /**
      * Session Id
      */
     session_id: string;
+};
+
+/**
+ * StructuredClaim
+ */
+export type StructuredClaim = {
+    /**
+     * Aggregation
+     */
+    aggregation?: string | null;
+    /**
+     * Claim Type
+     */
+    claim_type: 'metric_total' | 'result_row';
+    /**
+     * Dimensions
+     */
+    dimensions?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Metric Id
+     */
+    metric_id?: string | null;
+    /**
+     * Metric Version
+     */
+    metric_version?: string | null;
+    /**
+     * Unit
+     */
+    unit?: string | null;
+    /**
+     * Value
+     */
+    value?: number | number | null;
+    /**
+     * Values
+     */
+    values?: {
+        [key: string]: number | number;
+    };
 };
 
 /**
@@ -762,7 +1617,7 @@ export type TaskPlan = {
     /**
      * Task Type
      */
-    task_type: 'query' | 'compare' | 'forecast' | 'alert' | 'transfer' | 'geo' | 'correlation' | 'diagnosis' | 'trend' | 'report';
+    task_type: 'query' | 'compare' | 'forecast' | 'alert' | 'transfer' | 'geo' | 'correlation' | 'diagnosis' | 'trend' | 'report' | 'travel' | 'help' | 'general';
 };
 
 /**
@@ -784,19 +1639,68 @@ export type TimeRange = {
  */
 export type ToolResult = {
     /**
+     * Access Scope Hash
+     */
+    access_scope_hash?: string | null;
+    /**
      * Artifact Refs
      */
     artifact_refs?: Array<string>;
     /**
+     * Block Reason
+     */
+    block_reason?: string | null;
+    /**
+     * Calculation Method
+     */
+    calculation_method?: string | null;
+    /**
+     * Complete
+     */
+    complete?: boolean;
+    coverage?: CoverageEvidence;
+    /**
      * Error Code
      */
     error_code?: string | null;
+    /**
+     * Logical Plan Hash
+     */
+    logical_plan_hash?: string | null;
+    /**
+     * Matched Count Unknown
+     */
+    matched_count_unknown?: boolean;
+    /**
+     * Matched Row Count
+     */
+    matched_row_count?: number | null;
+    /**
+     * Policy Snapshot Id
+     */
+    policy_snapshot_id?: string | null;
+    /**
+     * Query Fingerprint
+     */
+    query_fingerprint?: string | null;
+    /**
+     * Result Hash
+     */
+    result_hash?: string | null;
+    /**
+     * Returned Row Count
+     */
+    returned_row_count?: number;
     /**
      * Rows
      */
     rows?: Array<{
         [key: string]: unknown;
     }>;
+    /**
+     * Source Step Ids
+     */
+    source_step_ids?: Array<string>;
     /**
      * Status
      */
@@ -815,6 +1719,10 @@ export type ToolResult = {
      * Tool
      */
     tool: string;
+    /**
+     * Truncated
+     */
+    truncated?: boolean;
     /**
      * Warnings
      */
@@ -865,6 +1773,32 @@ export type TransferAnalysisSpec = {
      * Window Minutes
      */
     window_minutes?: number;
+};
+
+/**
+ * TravelPlanSpec
+ */
+export type TravelPlanSpec = {
+    /**
+     * City
+     */
+    city?: string | null;
+    /**
+     * Departure Time
+     */
+    departure_time?: string | null;
+    /**
+     * Destination
+     */
+    destination?: string | null;
+    /**
+     * Mode
+     */
+    mode?: 'public_transit' | 'driving' | 'walking';
+    /**
+     * Origin
+     */
+    origin?: string | null;
 };
 
 /**
@@ -1169,6 +2103,22 @@ export type ForecastApiV1ForecastsDesignatedDayPostResponses = {
 };
 
 export type ForecastApiV1ForecastsDesignatedDayPostResponse = ForecastApiV1ForecastsDesignatedDayPostResponses[keyof ForecastApiV1ForecastsDesignatedDayPostResponses];
+
+export type GovernanceStatusApiV1GovernanceStatusGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/governance/status';
+};
+
+export type GovernanceStatusApiV1GovernanceStatusGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: GovernanceStatus;
+};
+
+export type GovernanceStatusApiV1GovernanceStatusGetResponse = GovernanceStatusApiV1GovernanceStatusGetResponses[keyof GovernanceStatusApiV1GovernanceStatusGetResponses];
 
 export type QueryApiV1QueriesPostData = {
     body: QueryRequest;

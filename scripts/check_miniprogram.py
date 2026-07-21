@@ -50,7 +50,7 @@ def main() -> int:
         re.IGNORECASE,
     )
     for path in CLIENT_ROOT.rglob("*"):
-        if path.is_file() and path.name != "README.md":
+        if path.is_file() and path.name != "README.md" and not path.name.startswith("."):
             text = path.read_text(encoding="utf-8")
             if forbidden.search(text):
                 raise SystemExit(f"possible secret material in {path.relative_to(ROOT)}")

@@ -464,23 +464,13 @@
       "category": "multi_compare",
       "question": "环比两个时段出站客流",
       "expected_task_type": "compare",
-      "expected_tools": [
-        "compare_metric_periods"
-      ],
-      "expected_status": "completed",
-      "expected_evidence_kinds": [
-        "fact"
-      ],
+      "expected_tools": [],
+      "expected_status": "needs_clarification",
+      "expected_evidence_kinds": [],
       "required_states": [
         "RECEIVE",
         "UNDERSTAND",
-        "CLARIFY",
-        "PLAN",
-        "EXECUTE_TOOLS",
-        "OBSERVE",
-        "SYNTHESIZE",
-        "VERIFY",
-        "RESPOND"
+        "CLARIFY"
       ],
       "artifact_required": false,
       "human_gate": false,
@@ -492,23 +482,13 @@
       "category": "multi_compare",
       "question": "同比两个时段换乘客流",
       "expected_task_type": "compare",
-      "expected_tools": [
-        "compare_metric_periods"
-      ],
-      "expected_status": "completed",
-      "expected_evidence_kinds": [
-        "fact"
-      ],
+      "expected_tools": [],
+      "expected_status": "needs_clarification",
+      "expected_evidence_kinds": [],
       "required_states": [
         "RECEIVE",
         "UNDERSTAND",
-        "CLARIFY",
-        "PLAN",
-        "EXECUTE_TOOLS",
-        "OBSERVE",
-        "SYNTHESIZE",
-        "VERIFY",
-        "RESPOND"
+        "CLARIFY"
       ],
       "artifact_required": false,
       "human_gate": false,
@@ -1274,7 +1254,7 @@
     {
       "case_id": "assistant-041",
       "category": "scheduled_report",
-      "question": "生成昨日全线网日报，与上期比较并找出异常",
+      "question": "生成昨日全线网日报，比较前后两个受控时段并找出异常",
       "expected_task_type": "report",
       "expected_tools": [
         "query_metric",
@@ -1306,7 +1286,7 @@
     {
       "case_id": "assistant-042",
       "category": "scheduled_report",
-      "question": "生成早高峰日报，与上期比较并找出异常",
+      "question": "生成上午客流日报，比较前后两个受控时段并找出异常",
       "expected_task_type": "report",
       "expected_tools": [
         "query_metric",
@@ -1338,7 +1318,7 @@
     {
       "case_id": "assistant-043",
       "category": "scheduled_report",
-      "question": "生成晚高峰日报，与上期比较并找出异常",
+      "question": "生成晚高峰日报，比较前后两个受控时段并找出异常",
       "expected_task_type": "report",
       "expected_tools": [
         "query_metric",
@@ -1370,7 +1350,7 @@
     {
       "case_id": "assistant-044",
       "category": "scheduled_report",
-      "question": "生成异常站点日报，与上期比较并找出异常",
+      "question": "生成异常站点日报，比较前后两个受控时段并找出异常",
       "expected_task_type": "report",
       "expected_tools": [
         "query_metric",
@@ -1402,7 +1382,7 @@
     {
       "case_id": "assistant-045",
       "category": "scheduled_report",
-      "question": "生成运营客流日报，与上期比较并找出异常",
+      "question": "生成运营客流日报，比较前后两个受控时段并找出异常",
       "expected_task_type": "report",
       "expected_tools": [
         "query_metric",

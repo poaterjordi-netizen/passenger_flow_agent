@@ -34,14 +34,20 @@
 | 受治理智能体工作流 | 已实现本地原型 | 意图、计划、工具、证据、核验、轨迹 |
 | Web 智能分析页面 | 已实现 | 可展示回答、图表、证据、状态机与模型调用信息 |
 | 离线确定性评测 | 已实现 | 当前仓库可复跑 100/100 Assistant Gold Cases |
-| 真实模型适配 | 已有隔离适配器 | Hermes Codex 仅本地 shadow；OpenAI-compatible 待生产联调 |
+| 真实模型适配 | 已完成本地影子验证 | Hermes Codex + GPT-5.6 Sol 已接入 Web 链路；OpenAI-compatible 仍待生产联调 |
+| 真实数据库适配 | 已完成本地只读影子验证 | 固定 QueryIR、TLS CA/证书指纹、只读事务、质量检查；尚未生产准入 |
+| 问题泛化 | 已实现 | OperationIR + 能力注册表 + 一次 GPT 通用兜底；实时事实仍需外部工具 |
 | 生产数据与运营联动 | 未准入 | 需要权威数据、RBAC/ABAC、准确率、性能与人工审批 |
 
 “测试通过”证明当前代码契约成立，不代表真实客流预测准确率或生产部署已经验收。
 
+本轮相对上次 GitHub 提交的完整对比、验证结果和剩余边界见
+[自 `02992ee` 以来的实施进展](progress_since_02992ee.md)。
+
 ## 从哪里开始
 
 - 第一次运行：[快速开始](quickstart_cn.md)
+- 查看本轮变化：[迭代进展](progress_since_02992ee.md)
 - 业务人员：[使用指南](user_guide_cn.md)
 - 理解系统：[总体架构](architecture.md) 与 [智能体工作流](assistant_architecture.md)
 - 合作开发：[项目结构](project_structure_cn.md) 与 [开发者指南](developer_guide_cn.md)

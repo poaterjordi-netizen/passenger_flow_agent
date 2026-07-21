@@ -1,0 +1,21 @@
+{
+  "decision_id": "fill-before-production-shadow-validation",
+  "status": "unapproved",
+  "business_owner": null,
+  "data_owner": null,
+  "security_owner": null,
+  "approved_source_candidate": null,
+  "approved_metrics": [],
+  "approved_city_and_entity_version": null,
+  "time_and_service_day_semantics": null,
+  "od_same_station_rule": null,
+  "model_endpoint_policy_id": null,
+  "real_evidence_egress_decision": null,
+  "sampling_and_profile_artifact_hashes": [],
+  "validated_fields_and_dates": [],
+  "blocked_data_products": [],
+  "open_questions": [],
+  "approved_at": null,
+  "expires_at": null,
+  "revalidation_trigger": "any semantic, source, mapping, access-policy, model-endpoint, or quality-gate change"
+}

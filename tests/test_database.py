@@ -1,4 +1,5 @@
 import unittest
+import hashlib
 from datetime import UTC, date, datetime
 from typing import Any
 from unittest import mock
@@ -51,12 +52,13 @@ class FakeCursor:
 
 
 class FakeConnection:
-    def __init__(self, rows=None, rollback_error=None) -> None:
+    def __init__(self, rows=None, rollback_error=None, peer_certificate=None) -> None:
         self.cursor_instance = FakeCursor(rows)
         self.rollback_count = 0
         self.close_count = 0
         self.commit_count = 0
         self.rollback_error = rollback_error
+        self._sock = FakeSocket(peer_certificate) if peer_certificate is not None else None
 
     def cursor(self):
         return self.cursor_instance
@@ -71,6 +73,14 @@ class FakeConnection:
 
     def close(self):
         self.close_count += 1
+
+
+class FakeSocket:
+    def __init__(self, certificate: bytes) -> None:
+        self.certificate = certificate
+
+    def getpeercert(self, *, binary_form=False):
+        return self.certificate if binary_form else {}
 
 
 class DatabaseSettingsTests(unittest.TestCase):
@@ -113,8 +123,37 @@ class DatabaseSettingsTests(unittest.TestCase):
         )
         kwargs = settings.connection_kwargs()
         self.assertTrue(kwargs["ssl"]["check_hostname"])
-        self.assertTrue(kwargs["ssl_verify_cert"])
-        self.assertTrue(kwargs["ssl_verify_identity"])
+        self.assertTrue(kwargs["ssl"]["verify_mode"])
+        self.assertNotIn("ssl_verify_cert", kwargs)
+        self.assertNotIn("ssl_verify_identity", kwargs)
+
+    def test_ca_with_exact_certificate_pin_disables_hostname_only(self) -> None:
+        certificate = b"server-certificate"
+        settings = DatabaseSettings(
+            "db",
+            3306,
+            "reader",
+            "secret",
+            "metro",
+            ssl_ca="/path/to/ca.pem",
+            tls_cert_sha256=hashlib.sha256(certificate).hexdigest(),
+        )
+        kwargs = settings.connection_kwargs()
+        self.assertTrue(kwargs["ssl"]["verify_mode"])
+        self.assertFalse(kwargs["ssl"]["check_hostname"])
+        self.assertEqual(settings.tls_identity_mode, "ca_and_certificate_pin")
+
+    def test_invalid_certificate_pin_is_rejected(self) -> None:
+        environment = {
+            "METRO_DB_HOST": "db.internal",
+            "METRO_DB_USER": "reader",
+            "METRO_DB_PASSWORD": "top-secret",
+            "METRO_DB_NAME": "metro",
+            "METRO_DB_SSL_CA": "/path/to/ca.pem",
+            "METRO_DB_TLS_CERT_SHA256": "not-a-digest",
+        }
+        with self.assertRaisesRegex(ValueError, "SHA-256"):
+            DatabaseSettings.from_env(environment)
 
 
 class QueryCompilationTests(unittest.TestCase):
@@ -127,6 +166,22 @@ class QueryCompilationTests(unittest.TestCase):
         self.assertIn(malicious, query.parameters)
         self.assertIn("Date = %s", query.sql)
         self.assertEqual(query.parameters[-1], 51)
+
+    def test_station_flow_time_window_is_half_open_and_naive(self) -> None:
+        query = compile_station_flow_query(
+            date(2023, 9, 27),
+            start_time=datetime(2023, 9, 27, 7, 0),
+            end_time=datetime(2023, 9, 27, 9, 0),
+            limit=50,
+        )
+        self.assertIn("StartTime >= %s", query.sql)
+        self.assertIn("StartTime < %s", query.sql)
+        with self.assertRaisesRegex(ValueError, "naive local"):
+            compile_station_flow_query(
+                date(2023, 9, 27),
+                start_time=datetime(2023, 9, 27, 7, 0, tzinfo=UTC),
+                end_time=datetime(2023, 9, 27, 9, 0, tzinfo=UTC),
+            )
 
     def test_od_window_is_half_open_and_parameterized(self) -> None:
         query = compile_od_flow_query(
@@ -221,6 +276,31 @@ class ReadOnlyExecutionTests(unittest.TestCase):
             database.fetch_station_flow_day(date(2023, 9, 27), limit=10)
         self.assertEqual(connection.commit_count, 0)
         self.assertEqual(connection.rollback_count, 1)
+
+    def test_executor_requires_the_configured_peer_certificate_pin(self) -> None:
+        certificate = b"server-certificate"
+        settings = DatabaseSettings(
+            host="db.internal",
+            port=3306,
+            user="reader",
+            password="secret",
+            database="metro",
+            ssl_ca="/path/to/ca.pem",
+            tls_cert_sha256=hashlib.sha256(certificate).hexdigest(),
+        )
+        matching = FakeConnection(peer_certificate=certificate)
+        result = ReadOnlyMetroDatabase(
+            settings, connector=lambda **_: matching
+        ).query_station_flow_day(date(2023, 9, 27), limit=1)
+        self.assertEqual(result.tls_identity_mode, "ca_and_certificate_pin")
+
+        mismatched = FakeConnection(peer_certificate=b"substituted-certificate")
+        with self.assertRaisesRegex(RuntimeError, "pin did not match"):
+            ReadOnlyMetroDatabase(
+                settings, connector=lambda **_: mismatched
+            ).query_station_flow_day(date(2023, 9, 27), limit=1)
+        self.assertEqual(mismatched.rollback_count, 1)
+        self.assertEqual(mismatched.close_count, 1)
 
     def test_limit_plus_one_distinguishes_complete_and_truncated_results(self) -> None:
         base_row = {

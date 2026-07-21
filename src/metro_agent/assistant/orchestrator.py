@@ -1,81 +1,125 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from metro_agent.api.service import SyntheticApiService
+from metro_agent.access import AccessContext, AuthorizationService
+from metro_agent.api.service import PassengerFlowDataService
 from metro_agent.assistant import prompts
+from metro_agent.assistant.capabilities import CapabilityRegistry
 from metro_agent.assistant.context_builder import ContextBuilder
 from metro_agent.assistant.evidence import build_evidence_packet
+from metro_agent.assistant.operation_ir import OperationCompiler
 from metro_agent.assistant.provider import (
     FakeProvider,
     HermesCodexProvider,
     LLMProvider,
     OpenAICompatibleProvider,
+    provider_endpoint_identity,
 )
 from metro_agent.assistant.schemas import (
     AssistantCapabilities,
     AssistantMessageRequest,
     AssistantResponse,
+    CapabilityMatch,
     DatasetEligibility,
+    EvidencePacket,
     HumanFeedback,
     HumanFeedbackRequest,
     IntentEnvelope,
+    ModelEgressRecord,
     ModelRuntime,
     RunRecord,
     TaskPlan,
+    ToolStep,
     ToolResult,
 )
 from metro_agent.assistant.tool_registry import ToolRegistry
-from metro_agent.assistant.trace_store import TraceStore
-from metro_agent.assistant.verifier import verify_intent, verify_plan, verify_response
+from metro_agent.assistant.trace_store import TraceRepository, TraceStore
+from metro_agent.assistant.verifier import (
+    verify_candidate_intent,
+    verify_evidence_packet,
+    verify_plan,
+    verify_response,
+)
 
 
 class AssistantService:
     def __init__(
         self,
-        data_service: SyntheticApiService,
+        data_service: PassengerFlowDataService,
         root: Path,
         provider: LLMProvider | None = None,
+        trace_repository: TraceRepository | None = None,
+        default_access_context: AccessContext | None = None,
+        production_enabled: bool = False,
     ) -> None:
         self.data_service = data_service
-        self.trace_store = TraceStore(root / "traces")
+        self.trace_store = trace_repository or TraceStore(root / "traces")
         self.tools = ToolRegistry(data_service, root / "reports")
-        self.context_builder = ContextBuilder(data_service, self.tools.names)
+        self.capability_registry = CapabilityRegistry()
+        self.operation_compiler = OperationCompiler(self.capability_registry)
+        self.context_builder = ContextBuilder(
+            data_service, self.tools.names, self.capability_registry
+        )
         self.provider = provider or provider_from_environment()
+        self.default_access_context = default_access_context
+        self.production_enabled = production_enabled
         self._message_lock = threading.RLock()
 
-    def create_session(self) -> dict[str, Any]:
-        return self.trace_store.create_session().model_dump(mode="json")
+    def _access(self, access_context: AccessContext | None) -> AccessContext:
+        context = access_context or self.default_access_context
+        if context is None and self.data_service.data_scope == "synthetic":
+            return AccessContext.synthetic_local()
+        if context is None:
+            raise PermissionError("production assistant requires a trusted access context")
+        return context
 
-    def get_run(self, run_id: str) -> dict[str, Any]:
-        return self.trace_store.get_run(run_id).model_dump(mode="json")
+    def create_session(self, access_context: AccessContext | None = None) -> dict[str, Any]:
+        context = self._access(access_context)
+        self._require_production_gate()
+        return self.trace_store.create_session(context).model_dump(mode="json")
 
-    def get_events(self, run_id: str) -> list[dict[str, Any]]:
-        return self.trace_store.get_run(run_id).events
+    def get_run(self, run_id: str, access_context: AccessContext | None = None) -> dict[str, Any]:
+        context = self._access(access_context)
+        return self.trace_store.get_run(run_id, context).model_dump(mode="json")
 
-    def capabilities(self) -> dict[str, Any]:
+    def get_events(
+        self, run_id: str, access_context: AccessContext | None = None
+    ) -> list[dict[str, Any]]:
+        context = self._access(access_context)
+        return self.trace_store.get_run(run_id, context).events
+
+    def capabilities(self, access_context: AccessContext | None = None) -> dict[str, Any]:
+        self._access(access_context)
         return AssistantCapabilities.model_validate(
             {
                 "implementation_status": "local_governed_prototype",
-                "data_scope": "synthetic",
+                "data_scope": self.data_service.data_scope,
                 "active_runtime": _provider_runtime(self.provider),
+                "capability_registry_version": self.capability_registry.registry_version,
+                "operation_capabilities": self.capability_registry.public_definitions(
+                    self.data_service.data_scope, set(self.tools.names)
+                ),
                 "architecture": [
                     {
                         "id": "understand",
                         "label": "意图理解",
-                        "owner": "llm",
-                        "detail": "生成候选意图；关键字段必须与 catalog-aware protected reference 一致。",
+                        "owner": "deterministic",
+                        "detail": "高置信规则直接解析；仅在规则 abstain 且策略允许时让模型选择候选。",
                     },
                     {
                         "id": "plan",
                         "label": "受约束规划",
-                        "owner": "llm",
-                        "detail": "生成候选 TaskPlan；工具、顺序和参数漂移会在执行前被拒绝。",
+                        "owner": "deterministic",
+                        "detail": "Intent 先编译为 OperationIR，再由版本化能力注册表映射到受控工具。",
                     },
                     {
                         "id": "execute",
@@ -93,7 +137,7 @@ class AssistantService:
                         "id": "synthesize",
                         "label": "证据化回答",
                         "owner": "llm",
-                        "detail": "模型只根据已产生的证据组织业务语言。",
+                        "detail": "目录与清单零模型渲染；复杂分析才由模型基于 EvidencePacket 组织语言。",
                     },
                     {
                         "id": "verify",
@@ -109,16 +153,17 @@ class AssistantService:
                     },
                 ],
                 "model_responsibilities": [
-                    "生成自然语言意图候选并抽取业务实体",
-                    "生成受 protected baseline 约束的结构化计划候选",
-                    "根据 EvidencePacket 组织可读回答",
+                    "在确定性解析 abstain 时对受控候选意图消歧",
+                    "仅在数据出域策略明确批准时根据 EvidencePacket 组织可读回答",
                 ],
                 "deterministic_controls": [
-                    "catalog-aware protected intent hard match",
-                    "allowlisted protected TaskPlan exact argument gate",
+                    "catalog、权限、版本、时间和实体硬校验",
+                    "确定性 planner 与物理裁剪后的工具白名单",
                     "参数化确定性工具和自由 SQL 禁止",
-                    "EvidencePacket 引用与数字支持校验",
-                    "完整状态机和审计轨迹",
+                    "完整性、截断、EvidencePacket 引用与数字支持校验",
+                    "OperationIR、能力注册表和 CoverageEvidence 覆盖语义校验",
+                    "session/run/audit owner 与访问范围哈希",
+                    "模型数据出域策略和字段摘要审计",
                 ],
                 "prohibited_model_actions": [
                     "保存或替代权威客流事实库",
@@ -162,22 +207,42 @@ class AssistantService:
                     "生产 OpenAI-compatible 端点与 secret manager 尚未联调",
                     "权威生产数据、正式权限和真实预测准确率尚未验收",
                     "自动通知、5 分钟调度和运营联动仍受人工闸门保护",
+                    "production-shadow 不等于 production-readonly 准入",
                 ],
             }
         ).model_dump(mode="json")
 
-    def message(self, session_id: str, request: AssistantMessageRequest) -> dict[str, Any]:
+    def message(
+        self,
+        session_id: str,
+        request: AssistantMessageRequest,
+        access_context: AccessContext | None = None,
+    ) -> dict[str, Any]:
+        context = self._access(access_context)
+        self._require_production_gate()
         with self._message_lock:
-            return self._message(session_id, request)
+            return self._message(session_id, request, context)
 
-    def record_feedback(self, run_id: str, request: HumanFeedbackRequest) -> dict[str, Any]:
+    def record_feedback(
+        self,
+        run_id: str,
+        request: HumanFeedbackRequest,
+        access_context: AccessContext | None = None,
+    ) -> dict[str, Any]:
+        context = self._access(access_context)
         with self._message_lock:
-            run = self.trace_store.get_run(run_id)
+            run = self.trace_store.get_run(run_id, context)
             adopted_verification = None
             if request.accepted and request.adopted_response is not None:
                 if run.evidence is None:
                     raise ValueError("cannot adopt a response without an evidence packet")
-                adopted_verification = verify_response(request.adopted_response, run.evidence)
+                adopted_verification = verify_response(
+                    request.adopted_response,
+                    run.evidence,
+                    allow_general_knowledge=bool(
+                        run.operation_ir and run.operation_ir.answer_policy == "llm_general"
+                    ),
+                )
                 if not adopted_verification.valid:
                     raise ValueError("adopted response failed evidence verification")
             run.human_feedback.append(
@@ -206,47 +271,160 @@ class AssistantService:
                     requires_human_confirmation=not trajectory_valid,
                 )
             self._event(run, "HUMAN_FEEDBACK", "人工修正与采纳状态已记录")
-            self.trace_store.save_run(run)
+            self.trace_store.save_run(run, context)
             return run.model_dump(mode="json")
 
-    def _message(self, session_id: str, request: AssistantMessageRequest) -> dict[str, Any]:
-        session = self.trace_store.get_session(session_id)
-        context = self.context_builder.build(request.message, session.messages)
+    def _message(
+        self, session_id: str, request: AssistantMessageRequest, access_context: AccessContext
+    ) -> dict[str, Any]:
+        session = self.trace_store.get_session(session_id, access_context)
+        context = self.context_builder.build(request.message, session.messages, access_context)
         provider_calls = 0
         usage_offset = len(getattr(self.provider, "usage_records", []))
         run = RunRecord(
             run_id=f"run-{uuid.uuid4().hex}",
             session_id=session_id,
             provider=self.provider.name,
+            owner_subject_id=access_context.subject_id,
+            owner_tenant_or_department=access_context.tenant_or_department,
+            access_scope_hash=access_context.scope_hash(),
+            policy_snapshot_id=access_context.policy_snapshot_id,
             model_runtime=_provider_runtime(self.provider),
             original_question=request.message,
             selected_context={
                 "business_dictionary": context["business_dictionary"],
                 "catalog": context["catalog"],
                 "available_tools": context["available_tools"],
+                "capability_registry": context["capability_registry"],
                 "recent_history": context["recent_history"],
                 "data_scope": context["data_scope"],
+                "data_quality": context["data_quality"],
+                "query_defaults": context["query_defaults"],
+                "prompt_manifest": prompts.manifest(),
+                "authorization": context["authorization"],
             },
         )
         self._event(run, "RECEIVE", "用户问题已进入状态机")
-        self.trace_store.save_run(run)
+        self.trace_store.save_run(run, access_context)
         try:
-            self._event(run, "UNDERSTAND", "生成结构化 IntentEnvelope")
+            self._event(run, "UNDERSTAND", "确定性解析或受控模型候选路由")
             protected_intent = FakeProvider().generate_structured(
-                prompts.UNDERSTAND_AND_PLAN,
+                prompts.INTENT_PARSER,
                 IntentEnvelope,
                 context=context,
             )
-            context["protected_reference_intent"] = protected_intent.model_dump(mode="json")
-            provider_calls += 1
-            intent = self.provider.generate_structured(
-                prompts.UNDERSTAND_AND_PLAN,
-                IntentEnvelope,
-                context=context,
+            deterministic_route = (
+                "clarification"
+                if protected_intent.needs_clarification or protected_intent.ambiguities
+                else "confident"
+                if self.operation_compiler.is_high_confidence(request.message, protected_intent)
+                else "abstain"
             )
-            verify_intent(intent, protected_intent)
+            if deterministic_route == "confident":
+                intent = protected_intent
+                run.intent_route = "deterministic"
+            elif deterministic_route == "clarification":
+                intent = protected_intent
+                run.intent_route = "clarification"
+            else:
+                endpoint_identity = provider_endpoint_identity(self.provider)
+                intent_context = _intent_outbound_context(context, protected_intent)
+                intent_prompt = (
+                    f"{prompts.INTENT_PARSER}\n"
+                    "Propose one candidate within candidate_domain. Do not invent catalog "
+                    "entities or permissions. immutable_scope is server-owned and will be locked."
+                )
+                allowed = _may_call_model(
+                    access_context,
+                    self.data_service.data_scope,
+                    self.provider,
+                    endpoint_identity,
+                )
+                call_index = self._start_model_egress(
+                    run,
+                    access_context,
+                    purpose="intent_candidate",
+                    prompt=intent_prompt,
+                    outbound_context=intent_context,
+                    schema=IntentEnvelope,
+                    endpoint_identity=endpoint_identity,
+                    allowed=allowed,
+                )
+                if allowed:
+                    provider_calls += 1
+                    try:
+                        candidate = self.provider.generate_structured(
+                            intent_prompt,
+                            IntentEnvelope,
+                            context=intent_context,
+                        )
+                    except Exception:
+                        self._finish_model_egress(run, access_context, call_index, "failed")
+                        raise
+                    self._finish_model_egress(run, access_context, call_index, "succeeded")
+                    intent = _lock_protected_intent(candidate, protected_intent)
+                    verify_candidate_intent(intent, context["catalog"], access_context)
+                    run.intent_route = "model_candidate"
+                else:
+                    intent = protected_intent.model_copy(
+                        update={
+                            "needs_clarification": True,
+                            "ambiguities": [
+                                *protected_intent.ambiguities,
+                                "确定性解析置信度不足，且 Intent 出域策略或端点绑定未批准。",
+                            ],
+                        }
+                    )
+                    run.intent_route = "clarification"
+            intent = _apply_relative_period_availability_gate(
+                intent, request.message, context["catalog"]
+            )
+            verify_candidate_intent(intent, context["catalog"], access_context)
             run.intent = intent
             context["intent"] = intent.model_dump(mode="json")
+            operation = self.operation_compiler.compile(
+                request.message,
+                intent,
+                route_confidence=(
+                    "model_candidate" if run.intent_route == "model_candidate" else "high"
+                ),
+            )
+            capability_match = self.capability_registry.match(
+                operation,
+                data_scope=self.data_service.data_scope,
+                available_tools=set(self.tools.names),
+            )
+            if capability_match.status == "matched":
+                operation = operation.model_copy(
+                    update={"answer_policy": capability_match.answer_policy}
+                )
+            elif capability_match.status == "missing_slots":
+                slot_labels = {"origin": "起点", "destination": "终点"}
+                missing_text = "、".join(
+                    slot_labels.get(slot, slot) for slot in capability_match.missing_slots
+                )
+                intent = intent.model_copy(
+                    update={
+                        "needs_clarification": True,
+                        "ambiguities": [
+                            *intent.ambiguities,
+                            f"任务缺少会改变执行结果的必要字段：{missing_text}。",
+                        ],
+                    }
+                )
+                run.intent = intent
+                context["intent"] = intent.model_dump(mode="json")
+                run.failure_category = "material_ambiguity"
+            run.operation_ir = operation
+            run.capability_match = capability_match
+            context["operation_ir"] = operation.model_dump(mode="json")
+            context["capability_match"] = capability_match.model_dump(mode="json")
+            self._event(
+                run,
+                "COMPILE_OPERATION",
+                f"{operation.operation}:{capability_match.status}:"
+                f"{capability_match.capability_id or 'none'}",
+            )
             self._event(run, "CLARIFY", "检查歧义和追问门")
             if intent.needs_clarification:
                 questions = intent.ambiguities or ["请补充时间、线路、站点或指标范围。"]
@@ -256,6 +434,7 @@ class AssistantService:
                     follow_up_questions=questions,
                 )
                 run.status = "needs_clarification"
+                run.failure_category = run.failure_category or "material_ambiguity"
                 run.model_runtime = _provider_runtime(
                     self.provider,
                     provider_calls=provider_calls,
@@ -267,45 +446,123 @@ class AssistantService:
                         {"role": "assistant", "content": "；".join(questions)},
                     ]
                 )
-                self.trace_store.save_session(session)
-                self.trace_store.save_run(run)
+                self.trace_store.save_session(session, access_context)
+                self.trace_store.save_run(run, access_context)
                 return run.model_dump(mode="json")
 
-            self._event(run, "PLAN", "生成受约束 TaskPlan")
-            protected_plan = FakeProvider().generate_tool_calls(
-                prompts.UNDERSTAND_AND_PLAN,
+            self._event(run, "PLAN", "确定性 planner 根据已验证 Intent 生成 TaskPlan")
+            plan = FakeProvider().generate_tool_calls(
+                prompts.TOOL_PLANNER,
                 context=context,
             )
-            context["protected_reference_plan"] = protected_plan.model_dump(mode="json")
-            provider_calls += 1
-            plan = self.provider.generate_tool_calls(prompts.UNDERSTAND_AND_PLAN, context=context)
-            verify_plan(plan, set(self.tools.names), protected_plan)
+            unavailable_tools = sorted({step.tool for step in plan.steps} - set(self.tools.names))
+            if unavailable_tools:
+                self._event(
+                    run,
+                    "CAPABILITY_FALLBACK",
+                    "原任务依赖未准入能力，改为执行受控能力准入检查",
+                )
+                plan = _capability_readiness_plan(intent)
+                operation = operation.model_copy(update={"answer_policy": "deterministic_summary"})
+                run.operation_ir = operation
+                run.capability_match = _readiness_capability_match(
+                    self.capability_registry, self.data_service.data_scope, set(self.tools.names)
+                )
+                context["operation_ir"] = operation.model_dump(mode="json")
+                context["capability_match"] = run.capability_match.model_dump(mode="json")
+            verify_plan(plan, set(self.tools.names))
+            _verify_plan_capability(plan, run.capability_match)
             run.plan = plan
             self._event(run, "EXECUTE_TOOLS", f"执行 {len(plan.steps)} 个工具步骤")
-            run.tool_results = self._execute_plan(plan, run)
+            run.tool_results = self._execute_plan(plan, run, access_context)
 
             self._event(run, "OBSERVE", "汇总工具结果与证据缺口")
-            evidence = build_evidence_packet(request.message, run.tool_results)
+            effective_results = run.tool_results
+            evidence = build_evidence_packet(request.message, effective_results)
             if any(result.status != "success" for result in run.tool_results):
                 self._event(run, "REPLAN", "存在失败或缺失证据，尝试一次受限重规划")
-                provider_calls += 1
                 extra = self._replan(context, plan, run.tool_results)
                 if extra:
                     run.replans.append(extra)
-                    run.tool_results.extend(self._execute_plan(extra, run))
-                    evidence = build_evidence_packet(request.message, run.tool_results)
+                    retry_results = self._execute_plan(extra, run, access_context)
+                    run.tool_results.extend(retry_results)
+                    effective_results = retry_results
+                    evidence = build_evidence_packet(request.message, effective_results)
             run.evidence = evidence
+            verify_evidence_packet(evidence, effective_results, access_context)
+            if plan.expected_evidence and not evidence.evidence_ids():
+                raise ValueError("task plan expected evidence was not produced")
 
             self._event(run, "SYNTHESIZE", "从 EvidencePacket 生成业务回答")
-            provider_calls += 1
-            response = self.provider.synthesize_from_evidence(
-                request.message,
-                evidence,
-                context=context,
+            model_answer = operation.answer_policy in {"llm_synthesis", "llm_general"}
+            context["synthesis_prompt"] = (
+                prompts.GENERAL_SYNTHESIZE
+                if operation.answer_policy == "llm_general"
+                else prompts.SYNTHESIZE
             )
+            synthesis_provider: LLMProvider
+            if not model_answer:
+                response = _deterministic_response(operation.operation, evidence)
+                self._event(run, "DETERMINISTIC_RENDER", "按 answer_policy 零模型渲染")
+            elif isinstance(self.provider, FakeProvider):
+                synthesis_provider = self.provider
+                response = synthesis_provider.synthesize_from_evidence(
+                    request.message,
+                    evidence,
+                    context=context,
+                )
+            else:
+                endpoint_identity = provider_endpoint_identity(self.provider)
+                synthesis_context = _synthesis_outbound_context(request.message, evidence, context)
+                synthesis_prompt = context["synthesis_prompt"]
+                allowed = _may_send_evidence(
+                    access_context,
+                    self.data_service.data_scope,
+                    self.provider,
+                    endpoint_identity,
+                )
+                call_index = self._start_model_egress(
+                    run,
+                    access_context,
+                    purpose="synthesis",
+                    prompt=synthesis_prompt,
+                    outbound_context=synthesis_context,
+                    schema=AssistantResponse,
+                    endpoint_identity=endpoint_identity,
+                    allowed=allowed,
+                )
+                if allowed:
+                    synthesis_provider = self.provider
+                    provider_calls += 1
+                    try:
+                        response = synthesis_provider.generate_structured(
+                            synthesis_prompt,
+                            AssistantResponse,
+                            context=synthesis_context,
+                        )
+                    except Exception:
+                        self._finish_model_egress(run, access_context, call_index, "failed")
+                        raise
+                    self._finish_model_egress(run, access_context, call_index, "succeeded")
+                else:
+                    synthesis_provider = FakeProvider()
+                    response = synthesis_provider.synthesize_from_evidence(
+                        request.message,
+                        evidence,
+                        context=context,
+                    )
+                    self._event(
+                        run,
+                        "MODEL_EGRESS_DENIED",
+                        "证据未发送给模型，改用确定性渲染器",
+                    )
             run.response = response
             self._event(run, "VERIFY", "核对证据引用、数字和失败步骤")
-            run.verification = verify_response(response, evidence)
+            run.verification = verify_response(
+                response,
+                evidence,
+                allow_general_knowledge=operation.answer_policy == "llm_general",
+            )
             if not run.verification.valid:
                 raise ValueError("assistant response failed evidence verification")
             run.dataset_eligibility = DatasetEligibility(
@@ -328,21 +585,24 @@ class AssistantService:
                     {"role": "assistant", "content": response.answer},
                 ]
             )
-            self.trace_store.save_session(session)
-            self.trace_store.save_run(run)
+            self.trace_store.save_session(session, access_context)
+            self.trace_store.save_run(run, access_context)
             return run.model_dump(mode="json")
-        except (ValueError, TypeError, RuntimeError) as exc:
+        except (PermissionError, ValueError, TypeError, RuntimeError) as exc:
             run.status = "failed"
+            run.failure_category = run.failure_category or _failure_category(exc)
             run.model_runtime = _provider_runtime(
                 self.provider,
                 provider_calls=provider_calls,
                 usage_offset=usage_offset,
             )
             self._event(run, "FAILED", _safe_failure(exc))
-            self.trace_store.save_run(run)
+            self.trace_store.save_run(run, access_context)
             raise
 
-    def _execute_plan(self, plan: TaskPlan, run: RunRecord) -> list[ToolResult]:
+    def _execute_plan(
+        self, plan: TaskPlan, run: RunRecord, access_context: AccessContext
+    ) -> list[ToolResult]:
         pending = {step.step_id: step for step in plan.steps}
         completed: dict[str, ToolResult] = {}
         ordered: list[ToolResult] = []
@@ -377,6 +637,7 @@ class AssistantService:
                         step.tool,
                         step.arguments,
                         dependencies,
+                        access_context,
                     ): step
                     for step, dependencies in executable
                 }
@@ -398,7 +659,7 @@ class AssistantService:
         original: TaskPlan,
         results: list[ToolResult],
     ) -> TaskPlan | None:
-        replanned = self.provider.generate_tool_calls(
+        replanned = FakeProvider().generate_tool_calls(
             prompts.OBSERVE_AND_REPLAN,
             context={
                 **context,
@@ -410,7 +671,9 @@ class AssistantService:
             (step.tool, _canonical(step.arguments)): step
             for step in original.steps
             if not step.depends_on
-            and any(result.step_id == step.step_id and result.status == "failed" for result in results)
+            and any(
+                result.step_id == step.step_id and result.status == "failed" for result in results
+            )
         }
         accepted_keys: list[tuple[str, str]] = []
         for step in replanned.steps:
@@ -420,11 +683,17 @@ class AssistantService:
             accepted_keys.append(key)
         if not accepted_keys:
             return None
+        id_map = {
+            step.step_id: f"s{100 + index}" for index, step in enumerate(original.steps, start=1)
+        }
         normalized = [
-            failed_root_steps[key].model_copy(
-                update={"step_id": f"s{100 + index}", "depends_on": []}
+            step.model_copy(
+                update={
+                    "step_id": id_map[step.step_id],
+                    "depends_on": [id_map[item] for item in step.depends_on],
+                }
             )
-            for index, key in enumerate(accepted_keys, start=1)
+            for step in original.steps
         ]
         plan = TaskPlan(
             plan_id=f"{original.plan_id}-replan",
@@ -443,6 +712,67 @@ class AssistantService:
         verify_plan(plan, set(self.tools.names), protected_retry)
         return plan
 
+    def _require_production_gate(self) -> None:
+        if self.data_service.data_scope != "synthetic" and not self.production_enabled:
+            raise PermissionError(
+                "production-shadow assistant is disabled until offline validation is promoted"
+            )
+
+    def _start_model_egress(
+        self,
+        run: RunRecord,
+        access_context: AccessContext,
+        *,
+        purpose: str,
+        prompt: str,
+        outbound_context: dict[str, Any],
+        schema: type,
+        endpoint_identity: dict[str, str],
+        allowed: bool,
+    ) -> int:
+        payload = {
+            "prompt": prompt,
+            "context": outbound_context,
+            "response_schema": schema.model_json_schema(),
+        }
+        now = datetime.now(UTC).isoformat()
+        run.model_egress.append(
+            ModelEgressRecord(
+                call_id=f"model-call-{uuid.uuid4().hex}",
+                purpose=purpose,
+                decision="approved" if allowed else "denied",
+                endpoint_policy_id=access_context.model_endpoint_policy_id,
+                provider=endpoint_identity["provider"],
+                model=endpoint_identity.get("model") or None,
+                endpoint_target_hash=endpoint_identity["target_hash"],
+                endpoint_binding_verified=AuthorizationService.endpoint_matches(
+                    access_context, endpoint_identity
+                ),
+                exact_payload_hash=_hash_payload(payload),
+                outbound_field_paths=_field_paths(payload),
+                started_at=now,
+                completed_at=None if allowed else now,
+                status="started" if allowed else "not_called",
+            )
+        )
+        self.trace_store.save_run(run, access_context)
+        return len(run.model_egress) - 1
+
+    def _finish_model_egress(
+        self,
+        run: RunRecord,
+        access_context: AccessContext,
+        index: int,
+        status: str,
+    ) -> None:
+        run.model_egress[index] = run.model_egress[index].model_copy(
+            update={
+                "status": status,
+                "completed_at": datetime.now(UTC).isoformat(),
+            }
+        )
+        self.trace_store.save_run(run, access_context)
+
     @staticmethod
     def _event(run: RunRecord, state: str, detail: str) -> None:
         from datetime import UTC, datetime
@@ -450,6 +780,305 @@ class AssistantService:
         run.events.append(
             {"state": state, "detail": detail, "timestamp": datetime.now(UTC).isoformat()}
         )
+
+
+def _readiness_capability_match(
+    registry: CapabilityRegistry, data_scope: str, available_tools: set[str]
+) -> CapabilityMatch:
+    definition = next(
+        (
+            item
+            for item in registry.definitions
+            if item.id == "production_capability_readiness" and data_scope in item.data_scopes
+        ),
+        None,
+    )
+    if definition is None:
+        raise ValueError("capability readiness fallback is not registered for this data scope")
+    unavailable = sorted(set(definition.tools) - available_tools)
+    if unavailable:
+        raise ValueError("capability readiness tools are not available")
+    return CapabilityMatch(
+        status="matched",
+        capability_id=definition.id,
+        registry_version=registry.registry_version,
+        tools=definition.tools,
+        answer_policy=definition.answer_policy,
+        completeness_policy=definition.completeness_policy,
+    )
+
+
+def _verify_plan_capability(plan: TaskPlan, match: CapabilityMatch | None) -> None:
+    if match is None or match.status != "matched":
+        raise ValueError("task has no matched runtime capability")
+    outside = sorted({step.tool for step in plan.steps} - set(match.tools))
+    if outside:
+        raise ValueError(f"task plan escaped its registered capability: {', '.join(outside)}")
+
+
+def _deterministic_response(operation: str, evidence: EvidencePacket) -> AssistantResponse:
+    items = [
+        item
+        for group in (
+            evidence.facts,
+            evidence.statistics,
+            evidence.charts,
+            evidence.model_outputs,
+            evidence.knowledge_sources,
+        )
+        for item in group
+    ]
+    claims = [item.claim for item in items]
+    details: list[str] = []
+    if operation == "list_metrics":
+        rows = [
+            row
+            for item in items
+            for row in (item.value.get("rows", []) if isinstance(item.value, dict) else [])
+        ]
+        details = [
+            str(row.get("name") or row.get("label") or row.get("id"))
+            + (f"（{row['id']}）" if row.get("id") else "")
+            for row in rows
+        ]
+    elif operation == "list_available_dates":
+        rows = [
+            row
+            for item in items
+            for row in (item.value.get("rows", []) if isinstance(item.value, dict) else [])
+        ]
+        details = [str(row["date"]) for row in rows if row.get("date")]
+    elif operation == "capability_help":
+        rows = [
+            row
+            for item in items
+            for row in (item.value.get("rows", []) if isinstance(item.value, dict) else [])
+        ]
+        details = [
+            f"{row.get('label')}（{row.get('operations')}）"
+            for row in rows
+            if row.get("label") and row.get("operations")
+        ]
+    readiness_actions = [
+        str(row.get("action") or row.get("requirement"))
+        for item in items
+        if item.coverage.coverage_type == "capability_readiness"
+        for row in (item.value.get("rows", []) if isinstance(item.value, dict) else [])
+        if row.get("action") or row.get("requirement")
+    ]
+    answer_parts = claims or ["当前工具未返回足够证据。"]
+    if details:
+        answer_parts.append("、".join(details))
+    if readiness_actions:
+        answer_parts.append("待补齐：" + "；".join(readiness_actions))
+    recommendations: list[str] = []
+    assumptions: list[str] = []
+    if operation == "travel_plan":
+        for item in items:
+            value = item.value if isinstance(item.value, dict) else {}
+            summary = value.get("summary", {}) if isinstance(value, dict) else {}
+            if isinstance(summary, dict):
+                recommendations.extend(str(value) for value in summary.get("recommendations", []))
+                assumptions.extend(str(value) for value in summary.get("assumptions", []))
+    return AssistantResponse(
+        answer="；".join(answer_parts),
+        key_findings=claims,
+        evidence_refs=[item.evidence_id for item in items],
+        recommendations=recommendations,
+        assumptions=assumptions,
+        limitations=[*evidence.missing_evidence, *evidence.conflicts],
+    )
+
+
+def _capability_readiness_plan(intent: IntentEnvelope) -> TaskPlan:
+    return TaskPlan(
+        plan_id=f"plan-{intent.task_type}-capability-readiness",
+        task_type=intent.task_type,
+        steps=[
+            ToolStep(
+                step_id="s1",
+                tool="get_data_quality_status",
+                arguments={},
+            ),
+            ToolStep(
+                step_id="s2",
+                tool="assess_task_readiness",
+                arguments={"task_type": intent.task_type},
+                depends_on=["s1"],
+            ),
+        ],
+        expected_evidence=["capability admission requirements"],
+        answer_format="capability_readiness",
+    )
+
+
+def _lock_protected_intent(candidate: IntentEnvelope, protected: IntentEnvelope) -> IntentEnvelope:
+    """Model may improve semantics, but server-owned routing fields are immutable."""
+
+    return candidate.model_copy(
+        update={
+            "metric_version": protected.metric_version,
+            "city": protected.city,
+            "dataset_role": protected.dataset_role,
+            "source_version": protected.source_version,
+            "time_grain": protected.time_grain,
+        }
+    )
+
+
+def _apply_relative_period_availability_gate(
+    intent: IntentEnvelope, question: str, catalog: dict[str, Any]
+) -> IntentEnvelope:
+    if not any(token in question for token in ("环比", "同比", "上期")):
+        return intent
+    resolved = intent.time_scope.get("resolved_range")
+    available = catalog.get("default_time_range")
+    if not isinstance(resolved, dict) or not isinstance(available, dict):
+        return intent
+    start = _parse_datetime(resolved.get("start"))
+    end = _parse_datetime(resolved.get("end"))
+    available_start = _parse_datetime(available.get("start"))
+    available_end = _parse_datetime(available.get("end"))
+    if None in {start, end, available_start, available_end}:
+        return intent
+    assert start is not None and end is not None
+    assert available_start is not None and available_end is not None
+    if "同比" in question:
+        try:
+            baseline_start = start.replace(year=start.year - 1)
+            baseline_end = end.replace(year=end.year - 1)
+        except ValueError:
+            baseline_start = start - timedelta(days=365)
+            baseline_end = end - timedelta(days=365)
+    else:
+        duration = end - start
+        baseline_start, baseline_end = start - duration, start
+    if baseline_start >= available_start and baseline_end <= available_end:
+        return intent
+    message = "当前受控数据范围不包含完整基期，不能执行同比、环比或上期比较。"
+    return intent.model_copy(
+        update={
+            "needs_clarification": True,
+            "ambiguities": [*intent.ambiguities, message],
+        }
+    )
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _may_call_model(
+    context: AccessContext,
+    data_scope: str,
+    provider: LLMProvider,
+    endpoint_identity: dict[str, str],
+) -> bool:
+    return not isinstance(provider, FakeProvider) and AuthorizationService.may_send_intent_to_model(
+        context, data_scope, endpoint_identity
+    )
+
+
+def _may_send_evidence(
+    context: AccessContext,
+    data_scope: str,
+    provider: LLMProvider,
+    endpoint_identity: dict[str, str],
+) -> bool:
+    return not isinstance(
+        provider, FakeProvider
+    ) and AuthorizationService.may_send_evidence_to_model(context, data_scope, endpoint_identity)
+
+
+def _intent_outbound_context(
+    context: dict[str, Any], protected_intent: IntentEnvelope
+) -> dict[str, Any]:
+    catalog = context["catalog"]
+    return {
+        "data_scope": context["data_scope"],
+        "question": context["question"],
+        "recent_history": context.get("recent_history", [])[-6:],
+        "catalog": {
+            "city": catalog.get("city"),
+            "source_version": catalog.get("source_version"),
+            "default_time_range": catalog.get("default_time_range"),
+            "metrics": [
+                {
+                    "id": item.get("id"),
+                    "version": item.get("version"),
+                    "dimensions": item.get("dimensions", []),
+                }
+                for item in catalog.get("metrics", [])
+            ],
+            "lines": catalog.get("lines", []),
+            "stations": catalog.get("stations", []),
+            "directions": catalog.get("directions", []),
+        },
+        "candidate_domain": {
+            "task_types": [
+                "query",
+                "compare",
+                "forecast",
+                "alert",
+                "transfer",
+                "geo",
+                "correlation",
+                "diagnosis",
+                "trend",
+                "report",
+                "travel",
+                "help",
+                "general",
+            ],
+            "allowed_metrics": [item.get("id") for item in catalog.get("metrics", [])],
+        },
+        "immutable_scope": {
+            "metric_version": protected_intent.metric_version,
+            "city": protected_intent.city,
+            "dataset_role": protected_intent.dataset_role,
+            "source_version": protected_intent.source_version,
+            "time_grain": protected_intent.time_grain,
+        },
+    }
+
+
+def _synthesis_outbound_context(
+    question: str, evidence: EvidencePacket, context: dict[str, Any]
+) -> dict[str, Any]:
+    return {
+        "data_scope": context["data_scope"],
+        "question": question,
+        "task_type": context.get("intent", {}).get("task_type"),
+        "evidence": evidence.model_dump(mode="json"),
+    }
+
+
+def _hash_payload(payload: Any) -> str:
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _field_paths(value: Any, prefix: str = "") -> list[str]:
+    if isinstance(value, dict):
+        paths = [
+            path
+            for key in sorted(value)
+            for path in _field_paths(value[key], f"{prefix}.{key}" if prefix else key)
+        ]
+        return paths or ([prefix] if prefix else [])
+    if isinstance(value, list):
+        paths = [
+            path
+            for index, item in enumerate(value)
+            for path in _field_paths(item, f"{prefix}[{index}]")
+        ]
+        return paths or ([prefix] if prefix else [])
+    return [prefix]
 
 
 def provider_from_environment() -> LLMProvider:
@@ -564,3 +1193,24 @@ def _safe_failure(exc: Exception) -> str:
     if isinstance(exc, RuntimeError):
         return "provider_or_runtime_failure"
     return str(exc)[:200]
+
+
+def _failure_category(exc: Exception) -> str:
+    message = str(exc).lower()
+    if isinstance(exc, PermissionError):
+        return "authorization_failure"
+    if isinstance(exc, RuntimeError):
+        return "model_failure"
+    if "entity" in message and ("not observed" in message or "outside" in message):
+        return "entity_not_found"
+    if "capability" in message or "unregistered tool" in message:
+        return "capability_gap"
+    if "query" in message and ("unsupported" in message or "invalid" in message):
+        return "query_ir_unsupported"
+    if "truncat" in message or "incomplete" in message:
+        return "result_truncated"
+    if "evidence" in message or "verification" in message or "response failed" in message:
+        return "verification_failure"
+    if "tool" in message:
+        return "tool_failure"
+    return "data_unavailable"

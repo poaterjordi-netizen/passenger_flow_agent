@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,22 @@ from typing import Any
 ALLOWED_DIMENSIONS = {"line", "station", "direction", "time"}
 ALLOWED_FILTER_FIELDS = {"line_id", "station_id", "direction"}
 ALLOWED_OPERATORS = {"eq", "in"}
+QUERY_IR_REQUIRED_FIELDS = {"metric", "time_range", "dimensions", "filters", "limit"}
+QUERY_IR_OPTIONAL_FIELDS = {
+    "metric_version",
+    "city",
+    "dataset_role",
+    "source_version",
+    "time_grain",
+    "time_basis",
+    "timezone",
+    "service_day",
+    "calendar_version",
+    "comparison_periods",
+    "cross_midnight_policy",
+    "data_as_of",
+    "order_by",
+}
 REQUIRED_DATA_FIELDS = {
     "timestamp",
     "line_id",
@@ -56,6 +73,17 @@ def validate_metric_registry(path: Path) -> dict[str, dict[str, Any]]:
             raise ValueError(f"metric registry: invalid dimensions for {metric_id}")
         if not isinstance(row.get("source_fields"), list) or not row["source_fields"]:
             raise ValueError(f"metric registry: source_fields missing for {metric_id}")
+        if "version" in row and (
+            not isinstance(row["version"], str)
+            or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", row["version"])
+        ):
+            raise ValueError(f"metric registry: invalid version for {metric_id}")
+        if "dataset_role" in row and row["dataset_role"] not in {"actual", "reference", "forecast"}:
+            raise ValueError(f"metric registry: invalid dataset_role for {metric_id}")
+        if "allowed_grains" in row and (
+            not isinstance(row["allowed_grains"], list) or not row["allowed_grains"]
+        ):
+            raise ValueError(f"metric registry: invalid allowed_grains for {metric_id}")
         registry[metric_id] = row
     return registry
 
@@ -63,12 +91,44 @@ def validate_metric_registry(path: Path) -> dict[str, dict[str, Any]]:
 def validate_query_ir(query: Any, registry: dict[str, dict[str, Any]], label: str) -> None:
     if not isinstance(query, dict):
         raise ValueError(f"{label}: query_ir must be an object")
-    required = {"metric", "time_range", "dimensions", "filters", "limit"}
-    if set(query) != required:
-        raise ValueError(f"{label}: query_ir fields must be exactly {sorted(required)}")
+    fields = set(query)
+    if not QUERY_IR_REQUIRED_FIELDS <= fields or fields - (
+        QUERY_IR_REQUIRED_FIELDS | QUERY_IR_OPTIONAL_FIELDS
+    ):
+        raise ValueError(
+            f"{label}: query_ir must include {sorted(QUERY_IR_REQUIRED_FIELDS)} and only allowlisted fields"
+        )
     metric = query["metric"]
     if metric not in registry:
         raise ValueError(f"{label}: unknown metric {metric}")
+    metric_version = query.get("metric_version")
+    if metric_version is not None and metric_version != registry[metric].get("version", "1.0.0"):
+        raise ValueError(f"{label}: unsupported metric version")
+    if query.get("dataset_role", "actual") not in {"actual", "reference", "forecast"}:
+        raise ValueError(f"{label}: invalid dataset_role")
+    for field_name in ("city", "source_version"):
+        value = query.get(field_name)
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise ValueError(f"{label}: invalid {field_name}")
+    time_grain = query.get("time_grain", "source")
+    allowed_grains = registry[metric].get("allowed_grains", ["source"])
+    if time_grain not in allowed_grains:
+        raise ValueError(f"{label}: time_grain not allowed for metric {metric}")
+    if query.get("time_basis", "event_time") not in {"event_time", "service_day"}:
+        raise ValueError(f"{label}: invalid time_basis")
+    if query.get("timezone", "Asia/Shanghai") != "Asia/Shanghai":
+        raise ValueError(f"{label}: unsupported timezone")
+    if query.get("cross_midnight_policy", "reject") not in {
+        "reject",
+        "service_day_calendar",
+    }:
+        raise ValueError(f"{label}: invalid cross_midnight_policy")
+    if query.get("time_basis") == "service_day" and (
+        not query.get("service_day") or not query.get("calendar_version")
+    ):
+        raise ValueError(f"{label}: service_day time basis requires day and calendar version")
+    if query.get("data_as_of") is not None:
+        _parse_datetime(query["data_as_of"], f"{label}.data_as_of")
     time_range = query["time_range"]
     if not isinstance(time_range, dict) or set(time_range) != {"start", "end"}:
         raise ValueError(f"{label}: invalid time_range")
@@ -76,6 +136,28 @@ def validate_query_ir(query: Any, registry: dict[str, dict[str, Any]], label: st
     end = _parse_datetime(time_range["end"], f"{label}.end")
     if start >= end:
         raise ValueError(f"{label}: start must be before end")
+    comparison_periods = query.get("comparison_periods")
+    if comparison_periods is not None:
+        if not isinstance(comparison_periods, dict) or set(comparison_periods) != {
+            "baseline",
+            "comparison",
+            "relation",
+        }:
+            raise ValueError(f"{label}: invalid comparison_periods")
+        if comparison_periods["relation"] not in {
+            "explicit",
+            "previous_period",
+            "year_over_year",
+        }:
+            raise ValueError(f"{label}: invalid comparison relation")
+        for period_name in ("baseline", "comparison"):
+            period = comparison_periods[period_name]
+            if not isinstance(period, dict) or set(period) != {"start", "end"}:
+                raise ValueError(f"{label}: invalid {period_name} period")
+            period_start = _parse_datetime(period["start"], f"{label}.{period_name}.start")
+            period_end = _parse_datetime(period["end"], f"{label}.{period_name}.end")
+            if period_start >= period_end:
+                raise ValueError(f"{label}: invalid {period_name} period order")
     dimensions = query["dimensions"]
     if not isinstance(dimensions, list) or len(dimensions) != len(set(dimensions)):
         raise ValueError(f"{label}: dimensions must be a unique list")
@@ -109,6 +191,18 @@ def validate_query_ir(query: Any, registry: dict[str, dict[str, Any]], label: st
     limit = query["limit"]
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 1000:
         raise ValueError(f"{label}: limit must be an integer from 1 to 1000")
+    order_by = query.get("order_by", [])
+    if not isinstance(order_by, list) or len(order_by) > 2:
+        raise ValueError(f"{label}: order_by must contain at most two fields")
+    allowed_order_fields = set(dimensions) | {metric}
+    for item in order_by:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"field", "direction"}
+            or item["field"] not in allowed_order_fields
+            or item["direction"] not in {"asc", "desc"}
+        ):
+            raise ValueError(f"{label}: invalid order_by")
 
 
 def validate_gold_cases(path: Path, registry: dict[str, dict[str, Any]]) -> int:

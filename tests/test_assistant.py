@@ -8,6 +8,7 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
+from metro_agent.access import AccessContext
 from metro_agent.api.models import QueryRequest
 from metro_agent.api.service import SyntheticApiService
 from metro_agent.api.settings import ApiSettings
@@ -22,6 +23,8 @@ from metro_agent.assistant.provider import (
     OpenAICompatibleProvider,
 )
 from metro_agent.assistant.dataset_export import DATASET_FILES, export_verified_trajectories
+from metro_agent.assistant.evidence import build_evidence_packet
+from metro_agent.assistant.failure_analysis import summarize_failure_traces
 from metro_agent.assistant.schemas import (
     AssistantMessageRequest,
     AssistantResponse,
@@ -29,11 +32,12 @@ from metro_agent.assistant.schemas import (
     EvidencePacket,
     HumanFeedbackRequest,
     IntentEnvelope,
+    StructuredClaim,
     TaskPlan,
     ToolResult,
 )
 from metro_agent.assistant.tool_registry import ToolRegistry
-from metro_agent.assistant.verifier import verify_response
+from metro_agent.assistant.verifier import verify_evidence_packet, verify_response
 from scripts.evaluate_gpt56_shadow import _checks as shadow_checks
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,6 +48,7 @@ class AssistantTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         root = Path(self.temporary.name)
+        self.root = root
         service = SyntheticApiService(
             ApiSettings(
                 metrics_path=ROOT / "examples/synthetic_data/metrics.json",
@@ -52,7 +57,201 @@ class AssistantTests(unittest.TestCase):
                 environment="test",
             )
         )
+        self.service = service
         self.assistant = AssistantService(service, root / "assistant", provider=FakeProvider())
+
+    def test_operation_ir_discovery_variants_use_zero_model_calls(self) -> None:
+        class CountingProvider(FakeProvider):
+            def __init__(self) -> None:
+                self.synthesis_calls = 0
+
+            def synthesize_from_evidence(self, question, evidence, *, context):
+                self.synthesis_calls += 1
+                return super().synthesize_from_evidence(question, evidence, context=context)
+
+        provider = CountingProvider()
+        assistant = AssistantService(
+            self.service,
+            self.root / "operation-discovery",
+            provider=provider,
+        )
+        cases = {
+            "有哪些车站": ("list_entities", "entity_inventory"),
+            "车站清单": ("list_entities", "entity_inventory"),
+            "把数据库里的地铁站给我": ("list_entities", "entity_inventory"),
+            "有哪些指标": ("list_metrics", "metric_catalog"),
+            "数据覆盖哪些日期": ("list_available_dates", "date_catalog"),
+            "数据库基本情况": ("summarize_dataset", "data_scope_summary"),
+        }
+        for question, expected in cases.items():
+            with self.subTest(question=question):
+                session_id = assistant.create_session()["session_id"]
+                run = assistant.message(session_id, AssistantMessageRequest(message=question))
+                self.assertEqual(run["status"], "completed")
+                self.assertEqual(run["operation_ir"]["operation"], expected[0])
+                self.assertEqual(run["capability_match"]["capability_id"], expected[1])
+                self.assertEqual(run["model_runtime"]["model_calls"], 0)
+                self.assertEqual(run["model_runtime"]["provider_calls"], 0)
+                self.assertEqual(
+                    run["operation_ir"]["answer_policy"].split("_")[0], "deterministic"
+                )
+                coverage = run["tool_results"][0]["coverage"]
+                self.assertTrue(coverage["complete"])
+                self.assertFalse(coverage["truncated"])
+                self.assertEqual(
+                    coverage["returned_count"], run["tool_results"][0]["returned_row_count"]
+                )
+        self.assertEqual(provider.synthesis_calls, 0)
+
+    def test_failed_trace_clustering_yields_regression_candidate(self) -> None:
+        session_id = self.assistant.create_session()["session_id"]
+        run = self.assistant.message(session_id, AssistantMessageRequest(message="帮我看看"))
+        self.assertEqual(run["status"], "needs_clarification")
+        report = summarize_failure_traces(self.root / "assistant" / "traces")
+        self.assertEqual(report["failed_or_clarified_run_count"], 1)
+        self.assertEqual(report["clusters"][0]["failure_category"], "material_ambiguity")
+        self.assertEqual(report["clusters"][0]["regression_candidate"]["question"], "帮我看看")
+
+    def test_travel_planning_is_deterministic_and_only_requires_endpoints(self) -> None:
+        cases = (
+            "我要从北京交通大学到北京工业大学，给出合理的出现规划",
+            "从北交大到北工大怎么走",
+            "从北京交通大学到北京工业大学出行规划",
+        )
+        for question in cases:
+            with self.subTest(question=question):
+                session_id = self.assistant.create_session()["session_id"]
+                run = self.assistant.message(session_id, AssistantMessageRequest(message=question))
+                self.assertEqual(run["status"], "completed")
+                self.assertEqual(run["intent"]["task_type"], "travel")
+                self.assertEqual(run["intent_route"], "deterministic")
+                self.assertEqual(run["operation_ir"]["operation"], "travel_plan")
+                self.assertEqual(run["capability_match"]["capability_id"], "travel_planning")
+                self.assertEqual(run["plan"]["steps"][0]["tool"], "plan_public_transit_route")
+                self.assertEqual(run["model_runtime"]["model_calls"], 0)
+                self.assertEqual(run["model_runtime"]["provider_calls"], 0)
+                self.assertTrue(run["verification"]["valid"])
+                self.assertIn("西直门", run["response"]["answer"])
+                self.assertIn("北工大西门", run["response"]["answer"])
+                result = run["tool_results"][0]
+                self.assertEqual(result["coverage"]["coverage_type"], "external_navigation")
+                self.assertTrue(result["coverage"]["complete"])
+                navigation = result["summary"]["navigation_links"]
+                self.assertTrue(navigation[0]["url"].startswith("https://api.map.baidu.com/"))
+
+        session_id = self.assistant.create_session()["session_id"]
+        generic = self.assistant.message(
+            session_id, AssistantMessageRequest(message="从天安门到颐和园怎么走")
+        )
+        self.assertEqual(generic["status"], "completed")
+        self.assertIn("实时地图导航入口", generic["response"]["answer"])
+        self.assertNotIn("西直门", generic["response"]["answer"])
+
+        session_id = self.assistant.create_session()["session_id"]
+        missing = self.assistant.message(
+            session_id, AssistantMessageRequest(message="从北京交通大学出发怎么走")
+        )
+        self.assertEqual(missing["status"], "needs_clarification")
+        self.assertEqual(missing["capability_match"]["missing_slots"], ["destination"])
+        self.assertEqual(
+            missing["response"]["follow_up_questions"], ["任务缺少会改变执行结果的必要字段：终点。"]
+        )
+        self.assertFalse(missing["tool_results"])
+
+    def test_capability_help_and_general_fallback_cover_open_questions(self) -> None:
+        session_id = self.assistant.create_session()["session_id"]
+        help_run = self.assistant.message(
+            session_id, AssistantMessageRequest(message="你能做什么？")
+        )
+        self.assertEqual(help_run["status"], "completed")
+        self.assertEqual(help_run["intent"]["task_type"], "help")
+        self.assertEqual(help_run["operation_ir"]["operation"], "capability_help")
+        self.assertEqual(
+            help_run["capability_match"]["capability_id"],
+            "assistant_capability_help",
+        )
+        self.assertEqual(help_run["model_runtime"]["provider_calls"], 0)
+        self.assertIn("GPT 通用问答", help_run["response"]["answer"])
+
+        class GeneralProvider:
+            name = "general-provider"
+            model = "general-model"
+
+            def __init__(self):
+                self.usage_records = []
+
+            def generate_structured(self, prompt, schema, *, context):
+                self.usage_records.append(
+                    {
+                        "api_calls": 1,
+                        "completed": True,
+                        "failed": False,
+                        "input_tokens": 20,
+                        "output_tokens": 20,
+                        "total_tokens": 40,
+                    }
+                )
+                return schema.model_validate(
+                    {
+                        "answer": "断面客流用于描述列车或线路通过某一断面的客流规模。",
+                        "key_findings": ["这是通用概念说明，不是数据库查询结果。"],
+                        "evidence_refs": ["ev-s1"],
+                        "limitations": ["未读取 metroflow 数据库业务行。"],
+                    }
+                )
+
+            def generate_tool_calls(self, prompt, *, context):
+                raise AssertionError("planner must remain deterministic")
+
+            def synthesize_from_evidence(self, question, evidence, *, context):
+                raise AssertionError("structured synthesis path should be used")
+
+            def stream_text(self, prompt, *, context):
+                return iter(())
+
+        assistant = AssistantService(
+            self.service,
+            self.root / "general-answer",
+            provider=GeneralProvider(),
+        )
+        session_id = assistant.create_session()["session_id"]
+        general = assistant.message(
+            session_id, AssistantMessageRequest(message="什么是地铁断面客流？")
+        )
+        self.assertEqual(general["status"], "completed")
+        self.assertEqual(general["intent_route"], "deterministic")
+        self.assertEqual(general["intent"]["task_type"], "general")
+        self.assertEqual(general["operation_ir"]["operation"], "general_answer")
+        self.assertEqual(general["operation_ir"]["answer_policy"], "llm_general")
+        self.assertEqual(
+            general["capability_match"]["capability_id"],
+            "general_question_answering",
+        )
+        self.assertEqual(
+            [item["tool"] for item in general["tool_results"]],
+            ["prepare_general_context"],
+        )
+        self.assertFalse(general["tool_results"][0]["rows"][0]["database_rows_included"])
+        self.assertEqual(general["model_runtime"]["provider_calls"], 1)
+        self.assertEqual(general["model_runtime"]["model_calls"], 1)
+        self.assertTrue(general["verification"]["valid"])
+        self.assertIn("general knowledge", general["verification"]["warnings"][0])
+
+        for question in ("比较北京和上海哪个更适合旅游？", "预测明天北京天气"):
+            with self.subTest(question=question):
+                parsed = FakeProvider().generate_structured(
+                    "",
+                    IntentEnvelope,
+                    context=self.assistant.context_builder.build(question, []),
+                )
+                self.assertEqual(parsed.task_type, "general")
+
+        business = FakeProvider().generate_structured(
+            "",
+            IntentEnvelope,
+            context=self.assistant.context_builder.build("比较两个时段进站客流", []),
+        )
+        self.assertEqual(business.task_type, "compare")
 
     def test_ten_task_types_complete_with_verified_evidence(self) -> None:
         questions = {
@@ -161,8 +360,8 @@ class AssistantTests(unittest.TestCase):
         prompt = command[command.index("-z") + 1]
         self.assertEqual(intent.task_type, "query")
         self.assertIn("--safe-mode", command)
-        self.assertIn("Do not clarify merely because production data is absent", prompt)
-        self.assertIn("protected_reference_intent", prompt)
+        self.assertNotIn("Return that exact intent", prompt)
+        self.assertNotIn("protected_reference_intent", prompt)
         self.assertEqual(command[command.index("--provider") + 1], "openai-codex")
         self.assertEqual(command[command.index("-m") + 1], "gpt-5.6-sol")
         self.assertEqual(provider.usage_records[0]["provider"], "openai-codex")
@@ -368,7 +567,51 @@ class AssistantTests(unittest.TestCase):
         )
         self.assertFalse(report.valid)
 
-    def test_provider_intent_drift_is_blocked_before_any_tool_executes(self) -> None:
+    def test_evidence_hash_lineage_scope_and_completeness_are_verified(self) -> None:
+        context = AccessContext.synthetic_local()
+        request = QueryRequest.model_validate(
+            {
+                "metric": "entries",
+                "time_range": {
+                    "start": "2026-07-20T08:00:00+08:00",
+                    "end": "2026-07-20T10:00:00+08:00",
+                },
+                "dimensions": ["station"],
+                "filters": [],
+                "limit": 10,
+            }
+        )
+        result = self.assistant.tools.execute(
+            "s1", "query_metric", request.model_dump(mode="json"), [], context
+        )
+        packet = build_evidence_packet("query", [result])
+        verify_evidence_packet(packet, [result], context)
+
+        packet.facts[0].result_hash = "0" * 64
+        with self.assertRaisesRegex(ValueError, "result hash"):
+            verify_evidence_packet(packet, [result], context)
+
+        incomplete = EvidencePacket(
+            question="q",
+            facts=[
+                EvidenceItem(
+                    evidence_id="ev-incomplete",
+                    step_id="s1",
+                    kind="fact",
+                    claim="partial",
+                    complete=False,
+                    truncated=True,
+                )
+            ],
+        )
+        report = verify_response(
+            AssistantResponse(answer="partial", evidence_refs=["ev-incomplete"]),
+            incomplete,
+        )
+        self.assertFalse(report.valid)
+        self.assertIn("cited evidence is incomplete: ev-incomplete", report.errors)
+
+    def test_high_confidence_deterministic_route_does_not_call_model_intent(self) -> None:
         class DriftedIntentProvider(FakeProvider):
             def generate_structured(self, prompt, schema, *, context):
                 result = super().generate_structured(prompt, schema, context=context)
@@ -382,12 +625,91 @@ class AssistantTests(unittest.TestCase):
             provider=DriftedIntentProvider(),
         )
         session = assistant.create_session()["session_id"]
-        with patch.object(assistant.tools, "execute") as execute:
-            with self.assertRaisesRegex(ValueError, "intent drifted from protected reference"):
-                assistant.message(session, AssistantMessageRequest(message="查询各站进站客流"))
-        execute.assert_not_called()
+        run = assistant.message(session, AssistantMessageRequest(message="查询各站进站客流"))
+        self.assertEqual(run["status"], "completed")
+        self.assertEqual(run["intent_route"], "deterministic")
+        self.assertEqual(run["intent"]["metrics"], ["entries"])
 
-    def test_provider_plan_argument_drift_is_blocked_before_tool_execution(self) -> None:
+    def test_abstain_model_intent_call_is_minimal_and_audited_before_clarification(self) -> None:
+        class CandidateProvider:
+            name = "candidate-provider"
+            model = "candidate-model"
+
+            def generate_structured(self, prompt, schema, *, context):
+                candidate = FakeProvider().generate_structured(prompt, schema, context=context)
+                return candidate.model_copy(
+                    update={
+                        "needs_clarification": True,
+                        "ambiguities": ["需要明确业务问题"],
+                    }
+                )
+
+            def generate_tool_calls(self, prompt, *, context):
+                raise AssertionError("planner must remain deterministic")
+
+            def synthesize_from_evidence(self, question, evidence, *, context):
+                raise AssertionError("clarification must stop before synthesis")
+
+            def stream_text(self, prompt, *, context):
+                return iter(())
+
+        assistant = AssistantService(
+            self.assistant.data_service,
+            Path(self.temporary.name) / "intent-egress-assistant",
+            provider=CandidateProvider(),
+        )
+        session = assistant.create_session()["session_id"]
+        run = assistant.message(session, AssistantMessageRequest(message="概览"))
+
+        self.assertEqual(run["status"], "needs_clarification")
+        self.assertEqual(run["intent_route"], "model_candidate")
+        self.assertEqual(len(run["model_egress"]), 1)
+        call = run["model_egress"][0]
+        self.assertEqual(call["purpose"], "intent_candidate")
+        self.assertEqual(call["decision"], "approved")
+        self.assertEqual(call["status"], "succeeded")
+        self.assertTrue(call["exact_payload_hash"])
+        paths = set(call["outbound_field_paths"])
+        self.assertIn("context.question", paths)
+        self.assertFalse(any("authorization" in item for item in paths))
+        self.assertFalse(any("business_dictionary" in item for item in paths))
+        self.assertFalse(any("available_tools" in item for item in paths))
+
+    def test_failed_intent_model_call_remains_in_the_persisted_trace(self) -> None:
+        class FailingProvider:
+            name = "failing-provider"
+            model = "failing-model"
+
+            def generate_structured(self, prompt, schema, *, context):
+                raise RuntimeError("simulated provider failure")
+
+            def generate_tool_calls(self, prompt, *, context):
+                raise AssertionError("planner must remain deterministic")
+
+            def synthesize_from_evidence(self, question, evidence, *, context):
+                raise AssertionError("synthesis must not run")
+
+            def stream_text(self, prompt, *, context):
+                return iter(())
+
+        assistant = AssistantService(
+            self.assistant.data_service,
+            Path(self.temporary.name) / "failed-egress-assistant",
+            provider=FailingProvider(),
+        )
+        session = assistant.create_session()["session_id"]
+        with self.assertRaisesRegex(RuntimeError, "simulated provider failure"):
+            assistant.message(session, AssistantMessageRequest(message="概览"))
+
+        run_paths = list(assistant.trace_store.runs.glob("run-*.json"))
+        self.assertEqual(len(run_paths), 1)
+        persisted = json.loads(run_paths[0].read_text(encoding="utf-8"))
+        self.assertEqual(persisted["status"], "failed")
+        self.assertEqual(persisted["model_egress"][0]["purpose"], "intent_candidate")
+        self.assertEqual(persisted["model_egress"][0]["status"], "failed")
+        self.assertIsNotNone(persisted["model_egress"][0]["completed_at"])
+
+    def test_model_cannot_change_deterministic_plan_arguments(self) -> None:
         class DriftedPlanProvider(FakeProvider):
             def generate_tool_calls(self, prompt, *, context):
                 plan = super().generate_tool_calls(prompt, context=context)
@@ -402,10 +724,10 @@ class AssistantTests(unittest.TestCase):
             provider=DriftedPlanProvider(),
         )
         session = assistant.create_session()["session_id"]
-        with patch.object(assistant.tools, "execute") as execute:
-            with self.assertRaisesRegex(ValueError, "task plan drifted from protected reference"):
-                assistant.message(session, AssistantMessageRequest(message="查询各站进站客流"))
-        execute.assert_not_called()
+        run = assistant.message(session, AssistantMessageRequest(message="查询各站进站客流"))
+        self.assertEqual(run["status"], "completed")
+        self.assertEqual(run["planner_route"], "deterministic")
+        self.assertEqual(run["plan"]["steps"][0]["arguments"]["limit"], 100)
 
     def test_tool_registry_covers_statistics_forecast_transfer_geo_and_report(self) -> None:
         registry: ToolRegistry = self.assistant.tools
@@ -543,6 +865,22 @@ class AssistantTests(unittest.TestCase):
         self.assertEqual(run["plan"]["steps"][1]["tool"], "rank_stations")
         self.assertEqual(run["plan"]["steps"][1]["arguments"]["top_n"], 3)
 
+    def test_station_inventory_uses_complete_entity_tool(self) -> None:
+        session = self.assistant.create_session()["session_id"]
+        run = self.assistant.message(
+            session,
+            AssistantMessageRequest(message="列出数据库中的所有地铁站"),
+        )
+
+        self.assertEqual(run["status"], "completed")
+        self.assertEqual(run["intent_route"], "deterministic")
+        self.assertEqual(run["plan"]["steps"][0]["tool"], "list_observed_entities")
+        self.assertTrue(run["tool_results"][0]["complete"])
+        self.assertEqual(
+            run["tool_results"][0]["summary"]["entity_count"],
+            len(self.assistant.data_service.catalog()["stations"]),
+        )
+
     def test_peak_period_and_relative_date_are_resolved_without_hiding_fixture_scope(self) -> None:
         session = self.assistant.create_session()["session_id"]
         run = self.assistant.message(
@@ -587,10 +925,10 @@ class AssistantTests(unittest.TestCase):
         barrier = threading.Barrier(2, timeout=2)
         original = self.assistant.tools.execute
 
-        def synchronized_execute(step_id, tool, arguments, dependencies):
+        def synchronized_execute(step_id, tool, arguments, dependencies, access_context=None):
             if step_id in {"s1", "s2"}:
                 barrier.wait()
-            return original(step_id, tool, arguments, dependencies)
+            return original(step_id, tool, arguments, dependencies, access_context)
 
         session = self.assistant.create_session()["session_id"]
         with patch.object(self.assistant.tools, "execute", side_effect=synchronized_execute):
@@ -624,7 +962,7 @@ class AssistantTests(unittest.TestCase):
         original_execute = assistant.tools.execute
         failed_once = False
 
-        def fail_first_step(step_id, tool, arguments, dependencies):
+        def fail_first_step(step_id, tool, arguments, dependencies, access_context=None):
             nonlocal failed_once
             if not failed_once:
                 failed_once = True
@@ -634,14 +972,51 @@ class AssistantTests(unittest.TestCase):
                     status="failed",
                     error_code="TEST_TRANSIENT_FAILURE",
                 )
-            return original_execute(step_id, tool, arguments, dependencies)
+            return original_execute(step_id, tool, arguments, dependencies, access_context)
 
         with patch.object(assistant.tools, "execute", side_effect=fail_first_step):
             run = assistant.message(session, AssistantMessageRequest(message="查询进站客流"))
-        self.assertEqual(provider.plan_calls, 2)
+        self.assertEqual(provider.plan_calls, 0)
         self.assertEqual(len(run["replans"]), 1)
         self.assertEqual([item["status"] for item in run["tool_results"]], ["failed", "success"])
         self.assertIn("REPLAN", [item["state"] for item in run["events"]])
+
+    def test_replan_reexecutes_failed_root_and_downstream_closure(self) -> None:
+        assistant = AssistantService(
+            self.assistant.data_service,
+            Path(self.temporary.name) / "replan-closure-assistant",
+            provider=FakeProvider(),
+        )
+        session = assistant.create_session()["session_id"]
+        original_execute = assistant.tools.execute
+        failed_once = False
+
+        def fail_first_step(step_id, tool, arguments, dependencies, access_context=None):
+            nonlocal failed_once
+            if not failed_once and tool == "query_metric":
+                failed_once = True
+                return ToolResult(
+                    step_id=step_id,
+                    tool=tool,
+                    status="failed",
+                    error_code="TEST_TRANSIENT_FAILURE",
+                )
+            return original_execute(step_id, tool, arguments, dependencies, access_context)
+
+        with patch.object(assistant.tools, "execute", side_effect=fail_first_step):
+            run = assistant.message(
+                session,
+                AssistantMessageRequest(message="查询各站进站客流，只看前三名"),
+            )
+
+        self.assertEqual(run["status"], "completed")
+        self.assertEqual(
+            [item["status"] for item in run["tool_results"]],
+            ["failed", "skipped", "success", "success"],
+        )
+        self.assertEqual(run["tool_results"][-1]["tool"], "rank_stations")
+        self.assertTrue(run["evidence"]["statistics"])
+        self.assertEqual(run["evidence"]["statistics"][0]["step_id"], "s102")
 
     def test_partial_failure_replan_cannot_add_a_new_tool(self) -> None:
         class UnsafeReplanningProvider(FakeProvider):
@@ -674,7 +1049,7 @@ class AssistantTests(unittest.TestCase):
         )
         session = assistant.create_session()["session_id"]
 
-        def fail_step(step_id, tool, arguments, dependencies):
+        def fail_step(step_id, tool, arguments, dependencies, access_context=None):
             return ToolResult(
                 step_id=step_id,
                 tool=tool,
@@ -683,14 +1058,9 @@ class AssistantTests(unittest.TestCase):
             )
 
         with patch.object(assistant.tools, "execute", side_effect=fail_step):
-            run = assistant.message(session, AssistantMessageRequest(message="查询进站客流"))
-        self.assertEqual(provider.plan_calls, 2)
-        self.assertEqual(run["replans"], [])
-        self.assertEqual([item["status"] for item in run["tool_results"]], ["failed"])
-        self.assertEqual(
-            sum(item["state"] == "TOOL_RESULT" for item in run["events"]),
-            1,
-        )
+            with self.assertRaisesRegex(ValueError, "missing required tool evidence"):
+                assistant.message(session, AssistantMessageRequest(message="查询进站客流"))
+        self.assertEqual(provider.plan_calls, 0)
 
     def test_clarification_stops_before_tools_and_persists_the_question(self) -> None:
         assistant = AssistantService(
@@ -834,6 +1204,76 @@ class AssistantTests(unittest.TestCase):
                     packet,
                 )
                 self.assertTrue(report.valid, report.errors)
+
+    def test_verifier_accepts_supported_dates_thousands_and_numeric_station_codes(self) -> None:
+        packet = EvidencePacket(
+            question="查询各站进站客流并排序",
+            statistics=[
+                EvidenceItem(
+                    evidence_id="ev-s1",
+                    step_id="s1",
+                    kind="statistic",
+                    claim="entries 查询返回 41 行，合计 10953",
+                    value={
+                        "query_ir": {
+                            "time_range": {
+                                "start": "2023-09-27T06:00:00+08:00",
+                                "end": "2023-09-27T07:00:00+08:00",
+                            },
+                            "timezone": "Asia/Shanghai",
+                        },
+                        "rows": [
+                            {"station": "0219", "entries": 963},
+                            {"station": "0218", "entries": 734},
+                            {"station": "0213", "entries": 616},
+                        ],
+                    },
+                    structured_claims=[
+                        StructuredClaim(
+                            claim_type="metric_total",
+                            metric_id="entries",
+                            value=10953,
+                        ),
+                        StructuredClaim(
+                            claim_type="result_row",
+                            dimensions={"station": "0219"},
+                            values={"entries": 963},
+                        ),
+                        StructuredClaim(
+                            claim_type="result_row",
+                            dimensions={"station": "0218"},
+                            values={"entries": 734},
+                        ),
+                        StructuredClaim(
+                            claim_type="result_row",
+                            dimensions={"station": "0213"},
+                            values={"entries": 616},
+                        ),
+                    ],
+                )
+            ],
+        )
+        response = AssistantResponse(
+            answer=(
+                "按事件时间 2023-09-27 06:00 至 07:00（Asia/Shanghai），"
+                "共 41 个车站、合计 10,953 人次；0219站 963 人次，0218站 734 人次。"
+            ),
+            key_findings=["0219站963人次；其次为0218站734人次和0213站616人次"],
+            evidence_refs=["ev-s1"],
+            follow_up_questions=["ev-s1中的可见行明细被截断。"],
+        )
+        report = verify_response(response, packet)
+        self.assertTrue(report.valid, report.errors)
+
+        swapped = verify_response(
+            AssistantResponse(
+                answer="0219站 734 人次",
+                evidence_refs=["ev-s1"],
+            ),
+            packet,
+        )
+        self.assertFalse(swapped.valid)
+        self.assertIn("734", swapped.errors[0])
 
     def test_invalid_adopted_response_is_rejected_before_dataset_eligibility(self) -> None:
         session = self.assistant.create_session()["session_id"]

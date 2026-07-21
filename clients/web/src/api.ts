@@ -6,6 +6,7 @@ import {
   catalogApiV1CatalogGet,
   createAssistantSessionApiV1AssistantSessionsPost,
   forecastApiV1ForecastsDesignatedDayPost,
+  governanceStatusApiV1GovernanceStatusGet,
   healthHealthGet,
   queryApiV1QueriesPost,
 } from "./client/sdk.gen"
@@ -28,6 +29,7 @@ function unwrap<T>(response: { data?: T; error?: unknown }): T {
       invalid_request: "请求未通过安全校验，请缩小范围或调整问题后重试",
       provider_failure:
         "模型服务调用失败，本次没有绕过 verifier 或自动切换 Provider",
+      forbidden: "当前身份、数据范围或治理门禁不允许执行此操作",
     }
     throw new Error(
       (code && safeMessages[code]) || "请求失败，请检查后端服务和查询范围",
@@ -43,6 +45,10 @@ export async function getHealth() {
 
 export async function getCatalog() {
   return unwrap(await catalogApiV1CatalogGet())
+}
+
+export async function getGovernanceStatus() {
+  return unwrap(await governanceStatusApiV1GovernanceStatusGet())
 }
 
 export async function runQuery(body: QueryRequest) {
