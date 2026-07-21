@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AssistantEventsApiV1AssistantRunsRunIdEventsGetData, AssistantEventsApiV1AssistantRunsRunIdEventsGetErrors, AssistantEventsApiV1AssistantRunsRunIdEventsGetResponses, AssistantFeedbackApiV1AssistantRunsRunIdFeedbackPostData, AssistantFeedbackApiV1AssistantRunsRunIdFeedbackPostErrors, AssistantFeedbackApiV1AssistantRunsRunIdFeedbackPostResponses, AssistantMessageApiV1AssistantSessionsSessionIdMessagesPostData, AssistantMessageApiV1AssistantSessionsSessionIdMessagesPostErrors, AssistantMessageApiV1AssistantSessionsSessionIdMessagesPostResponses, AssistantRunApiV1AssistantRunsRunIdGetData, AssistantRunApiV1AssistantRunsRunIdGetErrors, AssistantRunApiV1AssistantRunsRunIdGetResponses, AuditApiV1AuditsAuditIdGetData, AuditApiV1AuditsAuditIdGetErrors, AuditApiV1AuditsAuditIdGetResponses, CatalogApiV1CatalogGetData, CatalogApiV1CatalogGetResponses, CreateAssistantSessionApiV1AssistantSessionsPostData, CreateAssistantSessionApiV1AssistantSessionsPostResponses, ForecastApiV1ForecastsDesignatedDayPostData, ForecastApiV1ForecastsDesignatedDayPostErrors, ForecastApiV1ForecastsDesignatedDayPostResponses, HealthHealthGetData, HealthHealthGetResponses, QueryApiV1QueriesPostData, QueryApiV1QueriesPostErrors, QueryApiV1QueriesPostResponses } from './types.gen';
+import type { AssistantCapabilitiesApiV1AssistantCapabilitiesGetData, AssistantCapabilitiesApiV1AssistantCapabilitiesGetResponses, AssistantEventsApiV1AssistantRunsRunIdEventsGetData, AssistantEventsApiV1AssistantRunsRunIdEventsGetErrors, AssistantEventsApiV1AssistantRunsRunIdEventsGetResponses, AssistantFeedbackApiV1AssistantRunsRunIdFeedbackPostData, AssistantFeedbackApiV1AssistantRunsRunIdFeedbackPostErrors, AssistantFeedbackApiV1AssistantRunsRunIdFeedbackPostResponses, AssistantMessageApiV1AssistantSessionsSessionIdMessagesPostData, AssistantMessageApiV1AssistantSessionsSessionIdMessagesPostErrors, AssistantMessageApiV1AssistantSessionsSessionIdMessagesPostResponses, AssistantRunApiV1AssistantRunsRunIdGetData, AssistantRunApiV1AssistantRunsRunIdGetErrors, AssistantRunApiV1AssistantRunsRunIdGetResponses, AuditApiV1AuditsAuditIdGetData, AuditApiV1AuditsAuditIdGetErrors, AuditApiV1AuditsAuditIdGetResponses, CatalogApiV1CatalogGetData, CatalogApiV1CatalogGetResponses, CreateAssistantSessionApiV1AssistantSessionsPostData, CreateAssistantSessionApiV1AssistantSessionsPostResponses, ForecastApiV1ForecastsDesignatedDayPostData, ForecastApiV1ForecastsDesignatedDayPostErrors, ForecastApiV1ForecastsDesignatedDayPostResponses, HealthHealthGetData, HealthHealthGetResponses, QueryApiV1QueriesPostData, QueryApiV1QueriesPostErrors, QueryApiV1QueriesPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -17,6 +17,15 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
      */
     meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta;
 };
+
+/**
+ * Assistant Capabilities
+ */
+export const assistantCapabilitiesApiV1AssistantCapabilitiesGet = <ThrowOnError extends boolean = false>(options?: Options<AssistantCapabilitiesApiV1AssistantCapabilitiesGetData, ThrowOnError>): RequestResult<AssistantCapabilitiesApiV1AssistantCapabilitiesGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<AssistantCapabilitiesApiV1AssistantCapabilitiesGetResponses, unknown, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/assistant/capabilities',
+    ...options
+});
 
 /**
  * Assistant Run

@@ -5,6 +5,67 @@ export type ClientOptions = {
 };
 
 /**
+ * AssistantArchitectureStage
+ */
+export type AssistantArchitectureStage = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Owner
+     */
+    owner: 'llm' | 'deterministic' | 'human';
+};
+
+/**
+ * AssistantCapabilities
+ */
+export type AssistantCapabilities = {
+    active_runtime: ModelRuntime;
+    /**
+     * Architecture
+     */
+    architecture: Array<AssistantArchitectureStage>;
+    /**
+     * Data Scope
+     */
+    data_scope: 'synthetic';
+    /**
+     * Deterministic Controls
+     */
+    deterministic_controls: Array<string>;
+    /**
+     * Implementation Status
+     */
+    implementation_status: 'local_governed_prototype';
+    /**
+     * Model Responsibilities
+     */
+    model_responsibilities: Array<string>;
+    /**
+     * Production Gaps
+     */
+    production_gaps: Array<string>;
+    /**
+     * Prohibited Model Actions
+     */
+    prohibited_model_actions: Array<string>;
+    /**
+     * Validated Milestones
+     */
+    validated_milestones: Array<ValidationMilestone>;
+};
+
+/**
  * AssistantMessageRequest
  */
 export type AssistantMessageRequest = {
@@ -461,6 +522,72 @@ export type MetricCatalogItem = {
 };
 
 /**
+ * ModelRuntime
+ */
+export type ModelRuntime = {
+    /**
+     * Elapsed Seconds
+     */
+    elapsed_seconds?: number | null;
+    /**
+     * Execution Role
+     */
+    execution_role?: 'deterministic_active' | 'model_active' | 'shadow_report_only';
+    /**
+     * Input Tokens
+     */
+    input_tokens?: number | null;
+    /**
+     * Invocation Status
+     */
+    invocation_status?: 'not_applicable' | 'configured' | 'succeeded' | 'failed' | 'partial';
+    /**
+     * Mode
+     */
+    mode?: 'offline_deterministic' | 'local_governed_model' | 'openai_compatible';
+    /**
+     * Model
+     */
+    model?: string | null;
+    /**
+     * Model Calls
+     */
+    model_calls?: number;
+    /**
+     * Output Tokens
+     */
+    output_tokens?: number | null;
+    /**
+     * Provider
+     */
+    provider?: string;
+    /**
+     * Provider Calls
+     */
+    provider_calls?: number;
+    /**
+     * Real Model Active
+     */
+    real_model_active?: boolean;
+    /**
+     * Real Model Configured
+     */
+    real_model_configured?: boolean;
+    /**
+     * Reasoning Tokens
+     */
+    reasoning_tokens?: number | null;
+    /**
+     * Total Tokens
+     */
+    total_tokens?: number | null;
+    /**
+     * Usage Reporting
+     */
+    usage_reporting?: 'not_applicable' | 'unavailable' | 'partial' | 'complete';
+};
+
+/**
  * QueryFilter
  */
 export type QueryFilter = {
@@ -552,6 +679,7 @@ export type RunRecord = {
      */
     human_feedback?: Array<HumanFeedback>;
     intent?: IntentEnvelope | null;
+    model_runtime?: ModelRuntime;
     /**
      * Original Question
      */
@@ -768,6 +896,32 @@ export type ValidationError = {
 };
 
 /**
+ * ValidationMilestone
+ */
+export type ValidationMilestone = {
+    /**
+     * Evidence
+     */
+    evidence: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Scope
+     */
+    scope: string;
+    /**
+     * Status
+     */
+    status: 'verified' | 'partial' | 'not_started';
+};
+
+/**
  * VerificationReport
  */
 export type VerificationReport = {
@@ -788,6 +942,22 @@ export type VerificationReport = {
      */
     warnings?: Array<string>;
 };
+
+export type AssistantCapabilitiesApiV1AssistantCapabilitiesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/assistant/capabilities';
+};
+
+export type AssistantCapabilitiesApiV1AssistantCapabilitiesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AssistantCapabilities;
+};
+
+export type AssistantCapabilitiesApiV1AssistantCapabilitiesGetResponse = AssistantCapabilitiesApiV1AssistantCapabilitiesGetResponses[keyof AssistantCapabilitiesApiV1AssistantCapabilitiesGetResponses];
 
 export type AssistantRunApiV1AssistantRunsRunIdGetData = {
     body?: never;

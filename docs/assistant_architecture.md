@@ -1,34 +1,45 @@
-# Governed metro assistant architecture
+# 受治理客流智能体工作流
 
-The assistant is an agentic workflow with a fixed state machine and replaceable model boundary. It does not expose model-generated SQL or an arbitrary function surface.
+本智能体采用固定外层状态机和可替换模型边界。它不是让模型自由调用数据库或任意函数，而是让模型在确定性基线、工具白名单、证据和核验器保护下完成语言理解与表达。
 
-## Runtime loop
+## 运行闭环
 
-`RECEIVE → UNDERSTAND → CLARIFY → PLAN → EXECUTE_TOOLS → OBSERVE → REPLAN → SYNTHESIZE → VERIFY → RESPOND`
+```text
+RECEIVE → UNDERSTAND → CLARIFY → PLAN → EXECUTE_TOOLS
+        → OBSERVE → REPLAN → SYNTHESIZE → VERIFY → RESPOND
+```
 
-The outer workflow is deterministic. A provider can interpret, plan and compose, while the tool registry computes all query, statistical, forecast, transfer, GIS and report values. The default local mode is `FakeProvider`, which lets development, CI, Gold Case evaluation and demonstrations run without network access or credentials. `OpenAICompatibleProvider` is the production-endpoint adapter. `HermesCodexProvider` is a local shadow-only bridge to an existing Hermes OpenAI Codex OAuth session.
+正常的真实模型路径通常包含三次模型调用：
 
-## Provider configuration
+1. 用户语言 → `IntentEnvelope`；
+2. `IntentEnvelope` → `TaskPlan`；
+3. `EvidencePacket` → `AssistantResponse`。
 
-Offline/default:
+工具失败时可增加一次受限重规划，但模型只能建议重试“原计划中已失败、无依赖、参数完全相同”的调用。它不能借失败新增工具、改变参数或扩大数据范围；不满足约束就不执行重试。默认 `FakeProvider` 是确定性代码，不产生真实模型调用；`RunRecord.model_runtime` 会区分 Provider 调用尝试、真实模型调用、token 报告可用性与耗时。
+
+## Protected baseline
+
+当前版本在工具执行前同时生成：
+
+- catalog-aware 的确定性 protected intent 与模型候选 intent；
+- 确定性 protected plan 与模型候选 plan。
+
+`verify_intent` 检查任务类型、实体、指标、时间、歧义、活动和换乘规格；`verify_plan` 检查任务类型、步骤、工具、参数、依赖、预期证据和回答格式。关键字段漂移时，在调用业务工具前拒绝。
+
+这保证当前原型稳健，但也意味着模型的实际规划自由度和增益有意受限。扩大权限前，必须用真实业务 Gold Cases、hard negatives 和基线对照证明净增益。
+
+## Provider 模式
+
+### 离线默认模式
 
 ```bash
 export METRO_ASSISTANT_PROVIDER=fake
 metro-agent-api
 ```
 
-GPT-5.6-sol through an OpenAI-compatible endpoint:
+`FakeProvider` 适合开发、CI、演示和可复现 Gold Case 评测，不需要网络或凭证。
 
-```bash
-export METRO_ASSISTANT_PROVIDER=openai
-export METRO_ASSISTANT_MODEL=gpt-5.6-sol
-export OPENAI_API_KEY='injected-by-secret-manager'
-# Optional only when using a compatible gateway:
-export OPENAI_BASE_URL='https://gateway.example/v1'
-metro-agent-api
-```
-
-Local GPT-5.6-sol shadow through an already authenticated Hermes installation:
+### 本机 Hermes Codex shadow
 
 ```bash
 export METRO_ASSISTANT_PROVIDER=hermes-codex
@@ -37,70 +48,66 @@ export METRO_ASSISTANT_HERMES_COMMAND=hermes
 metro-agent-api
 ```
 
-The Hermes bridge executes isolated one-shot calls with `--safe-mode` and a minimal ephemeral
-toolset. It delegates OAuth resolution to Hermes and never reads or copies Hermes credentials.
-It is deliberately not the production deployment route: use the OpenAI-compatible adapter and
-an approved secret manager for production. The bridge currently buffers each one-shot response;
-it does not provide token-by-token SSE.
+该适配器使用隔离的一次性 `hermes --safe-mode` 调用，由 Hermes 自己解析既有 OAuth；本项目不读取或复制凭证。它用于本机 shadow 验证，不是生产部署路线，也不提供逐 token SSE。
 
-Do not commit a key or put provider objects in business code. The adapter contract is:
+### OpenAI-compatible 适配器
+
+```bash
+export METRO_ASSISTANT_PROVIDER=openai
+export METRO_ASSISTANT_MODEL=gpt-5.6-sol
+export OPENAI_API_KEY='由密钥管理器在运行时注入'
+# 仅兼容网关需要：
+export OPENAI_BASE_URL='https://gateway.example/v1'
+metro-agent-api
+```
+
+生产使用仍需另行完成内网端点、密钥管理、超时、限流、审计和业务验收。
+
+统一接口：
 
 - `generate_structured(...)`
 - `generate_tool_calls(...)`
 - `synthesize_from_evidence(...)`
 - `stream_text(...)`
 
-## Stable contracts and modules
+## 稳定模块
 
-- `assistant/schemas.py`: `IntentEnvelope`, `EventSpec`, `TransferAnalysisSpec`, `ActionPlan`, `TaskPlan`, `ToolResult`, `EvidencePacket`, `AssistantResponse`, run/session, feedback, dataset-gate and verifier records.
-- `assistant/provider.py`: deterministic test provider, OpenAI-compatible endpoint adapter and local Hermes Codex shadow bridge.
-- `assistant/context_builder.py`: bounded catalog, dictionary, recent history and tool context.
-- `assistant/orchestrator.py`: state machine, clarification stop, dependency scheduling, bounded parallel execution, partial-failure continuation and one novel replan attempt.
-- `assistant/tool_registry.py`: allowlisted deterministic tools.
-- `assistant/evidence.py`: evidence normalization.
-- `assistant/verifier.py`: task-plan, evidence-reference, finite-number and answer-number support hard gates.
-- `assistant/trace_store.py`: atomic, replayable session and run trajectories. A trajectory stores selected context, intent, plan, replans, tool calls/results, evidence, response, verifier, human feedback, final adoption and dataset eligibility.
+- `assistant/schemas.py`：意图、计划、工具、证据、回答、运行时、会话和反馈契约。
+- `assistant/context_builder.py`：有界指标目录、业务字典、近期历史和工具上下文。
+- `assistant/orchestrator.py`：状态机、澄清门、依赖调度、并行、失败继续与一次重规划。
+- `assistant/provider.py`：离线与真实模型适配边界。
+- `assistant/tool_registry.py`：受控查询、统计、预测、换乘、GIS、SOP 和报告工具。
+- `assistant/evidence.py`：工具结果到 `EvidencePacket` 的规范化。
+- `assistant/verifier.py`：意图/计划漂移、证据引用、有限数和回答数字支持硬门。
+- `assistant/trace_store.py`：可回放 session/run 轨迹和人工反馈。
 
-## Tool coverage
+## 工具覆盖
 
-The registry includes the first governed implementation of:
+当前白名单包括：
 
-- metric catalog, QueryIR query, period comparison and ranking;
-- multi-line parallel comparison and synthetic ticket/line/hour multidimensional statistics;
-- growth, Pearson and lagged correlation, anomaly detection and trend decomposition;
-- reference-day and event-rule forecast baselines and sample evaluation;
-- simulated rail/bus transactions, transfer-window matching and threshold comparison;
-- simulated station geocoding, OD heatmap and commuting profile;
-- simulated capacity thresholds and operating SOP retrieval;
-- simulated operating-indicator alignment and human-gated action candidates;
-- diagnosis hypothesis evidence and local report artifacts.
+- 指标目录、QueryIR 查询、时段比较和站点排序；
+- 线路并行比较、票种/线路/小时合成统计；
+- 增长、Pearson/滞后相关、异常、趋势分解和时间序列基线；
+- 参考日与活动规则预测、回测样例；
+- 合成轨道/公交交易、换乘窗口和阈值比较；
+- 合成站点地理编码、OD 热力图和通勤画像；
+- 合成容量阈值、SOP、运营指标、人工确认动作候选；
+- 候选原因树和本地分析报告。
 
-All cross-network, GIS, event, real-time and SOP fixtures are explicitly synthetic. Event factors are architecture-validation rules, not validated model accuracy. SOP actions are recommendations requiring human confirmation.
+活动、跨网、GIS、实时和 SOP 数据当前均为合成夹具。活动因子用于验证架构，不是预测准确率结论。
 
-## HTTP and Web
+## HTTP 接口
 
+- `GET  /api/v1/assistant/capabilities`
 - `POST /api/v1/assistant/sessions`
 - `POST /api/v1/assistant/sessions/{session_id}/messages`
 - `GET  /api/v1/assistant/runs/{run_id}`
 - `GET  /api/v1/assistant/runs/{run_id}/events`
 - `POST /api/v1/assistant/runs/{run_id}/feedback`
 
-The Web “智能分析” page keeps the multi-turn conversation and shows the latest verified answer, task type, provider, tool timeline, state-machine events, Evidence Packet cards, result table, deterministic chart, limitations and human-gated recommendations.
+Web“智能分析”页面展示多轮对话、核验回答、任务类型、Provider、模型实际调用信息、工具时间线、状态机、证据卡、结果表、图表、限制和人工确认建议。
 
-## Phase 0–7 completion matrix
-
-| Phase | Working artifact | Verifier |
-| --- | --- | --- |
-| 0 provider contract | `provider.py`, Fake and OpenAI-compatible providers, structured and streaming methods | `tests/test_assistant.py` |
-| 1 natural-language QueryIR loop | metric/line/station/direction/dimension/Top-N extraction, multi-turn scope inheritance, QueryIR → QueryEngine → evidence → answer | argument-level tests and Web multi-turn E2E |
-| 2 multi-tool orchestrator | dependency graph, real concurrent independent batch, partial failure, one novel bounded replan | thread-barrier concurrency test, failure/replan trajectory assertions |
-| 3 statistics/anomaly/trend | deterministic statistical tools | unit and 100-case evaluation |
-| 4 event forecast | reference-day baseline plus explicit rule scenario and SOP | tool test and forecast Gold Cases |
-| 5 transfer/GIS | synthetic two-network matching and geo/OD datasets | Gold Cases |
-| 6 real-time/report | simulated signals, thresholds, SOP, human-gated action candidates and saved local report | Gold Cases and artifact readback |
-| 7 evaluation/demo | exactly 100 distinct end-to-end Gold Cases and Web intelligent-analysis page | semantic Gold checks and Playwright |
-
-## Evaluation
+## 评测
 
 ```bash
 python scripts/build_assistant_gold_cases.py
@@ -108,20 +115,19 @@ python scripts/evaluate_assistant.py --output /tmp/assistant-eval.json
 python scripts/evaluate_gpt56_shadow.py \
   --case-id assistant-001 --case-id assistant-021 --case-id assistant-081 \
   --output /tmp/gpt56-shadow.json
-python scripts/run_scheduled_assistant.py --output /tmp/daily-report.json
-python scripts/export_verified_dataset.py \
-  --run-dir /path/to/assistant/traces/runs \
-  --output-dir /tmp/verified-dataset
 ```
 
-`run_scheduled_assistant.py` is a one-shot, verified report runner intended for an external scheduler. It does not install cron, send notifications or create a long-lived background task.
+100 条用例检查任务类型、工具集合、参数、状态机、工具状态、证据类型、artifact、非因果限制和人工确认边界。通过表示结构化本地轨迹满足已有断言，不等于生产准确率。
 
-The 100 cases are not numbered copies. They use distinct business questions and verify expected tool sets, parameters, state-machine coverage, successful tool status, evidence kinds, artifact existence, non-causal limitations and human-confirmation boundaries. A passing case is a structurally verified dataset candidate, not proof of production accuracy.
+只有工具成功、证据完整、核验通过，并进一步通过 Gold Case 或获得真实人工采纳的轨迹，才可能进入未来数据集候选。系统不伪造人工标签。
 
-Only a valid structured trajectory with successful tools, supported evidence references and a passing verifier may become a future dataset candidate. A normal runtime trajectory remains ineligible until it either passes the Gold evaluation or receives explicit human feedback and a final adopted response through the feedback API. The project never manufactures a human label.
+## 生产准入缺口
 
-`export_verified_dataset.py` applies the eligibility, verifier, tool-success, missing-evidence and adoption gates again before writing `intent_understanding.jsonl`, `task_planning.jsonl`, `tool_calling.jsonl` and `evidence_response.jsonl`. Rejected run IDs and reasons are retained only in the export manifest; their contents are not copied into training files.
+- 权威运营数据与真实活动/摄像头/公交/GIS 数据；
+- 正式认证授权、RBAC/ABAC、字段级脱敏和审计保留策略；
+- 真实预测准确率、性能、并发、成本和灾备验收；
+- 生产 OpenAI-compatible 端点与批准的 secret manager；
+- 正式 SOP、调度、通知和运营联动责任流程；
+- 真实模型 100 条 Gold Cases 与相对确定性基线的净增益证明。
 
-## Remaining production gates
-
-The complete local architecture is not equivalent to production deployment. The following still require separate data, security, performance and human decisions: real operating data, real event/camera feeds, production SOP approval, authentication/authorization, tested forecast accuracy, scheduled execution, notification delivery, public network exposure, and any automatic operational action.
+在这些闸门完成前，本项目应表述为“本地受治理原型”，不能表述为已上线的生产客流决策系统。

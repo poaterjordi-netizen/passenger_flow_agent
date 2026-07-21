@@ -47,6 +47,12 @@ def _checks(case: dict[str, Any], run: dict[str, Any]) -> dict[str, bool]:
         for item in run.get("tool_results", [])
         for artifact in item.get("artifact_refs", [])
     ]
+    action_rows = [
+        row
+        for item in run.get("tool_results", [])
+        for row in item.get("rows", [])
+        if row.get("action")
+    ]
     limitations = " ".join(response.get("limitations", []))
     return {
         "status": run.get("status") == case["expected_status"],
@@ -66,12 +72,8 @@ def _checks(case: dict[str, Any], run: dict[str, Any]) -> dict[str, bool]:
         ),
         "human_gate": (
             bool(response.get("recommendations"))
-            and all(
-                row.get("requires_confirmation") is True
-                for item in run.get("tool_results", [])
-                for row in item.get("rows", [])
-                if row.get("action")
-            )
+            and bool(action_rows)
+            and all(row.get("requires_confirmation") is True for row in action_rows)
             if case["human_gate"]
             else True
         ),

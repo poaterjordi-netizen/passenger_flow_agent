@@ -83,11 +83,18 @@ export function MetricChart({
         },
       ],
     })
-    const resize = () => chart.resize()
+    let resizeFrame = 0
+    const resize = () => {
+      cancelAnimationFrame(resizeFrame)
+      resizeFrame = requestAnimationFrame(() => {
+        if (ref.current) chart.resize({ width: ref.current.clientWidth })
+      })
+    }
     window.addEventListener("resize", resize)
     const observer = new ResizeObserver(resize)
     observer.observe(ref.current)
     return () => {
+      cancelAnimationFrame(resizeFrame)
       observer.disconnect()
       window.removeEventListener("resize", resize)
       chart.dispose()
@@ -95,6 +102,12 @@ export function MetricChart({
   }, [color, kind, labels, name, values])
 
   return (
-    <div ref={ref} style={{ height }} role="img" aria-label={`${name}图表`} />
+    <div
+      ref={ref}
+      className="w-full min-w-0 overflow-hidden"
+      style={{ height }}
+      role="img"
+      aria-label={`${name}图表`}
+    />
   )
 }

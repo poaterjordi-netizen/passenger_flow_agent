@@ -1,5 +1,5 @@
-site_name: Metro Passenger Flow Agent
-site_description: Governed, deterministic passenger-flow query contracts and tooling.
+site_name: 地铁客流智能体
+site_description: 受治理、可审计、证据驱动的地铁客流分析智能体。
 site_url: https://passenger-flow-agent.readthedocs.io/
 repo_url: https://github.com/poaterjordi-netizen/passenger_flow_agent
 repo_name: poaterjordi-netizen/passenger_flow_agent
@@ -7,25 +7,32 @@ edit_uri: edit/main/docs/
 
 theme:
   name: material
-  language: en
+  language: zh
   features:
     - navigation.sections
     - navigation.top
     - content.code.copy
 
 nav:
-  - Home: index.md
-  - Product boundary: sanitized_requirements.md
-  - Architecture: architecture.md
-  - Governed assistant: assistant_architecture.md
-  - Deterministic query loop: p1_deterministic_loop.md
-  - Database and designated-day forecast: database_and_forecast.md
-  - WeChat Mini Program: mobile_miniprogram.md
-  - Open-source reuse assessment: open_source_reuse_assessment.md
-  - Web and deployment: web_and_deployment.md
-  - Data contract: data_contract.md
-  - Metric dictionary: metric_dictionary.md
-  - Threat model: threat_model.md
+  - 项目总览: index.md
+  - 用户使用:
+      - 快速开始: quickstart_cn.md
+      - 使用指南: user_guide_cn.md
+      - Web 与部署: web_and_deployment.md
+      - 微信小程序: mobile_miniprogram.md
+  - 系统设计:
+      - 总体架构: architecture.md
+      - 智能体工作流: assistant_architecture.md
+      - 确定性查询闭环: p1_deterministic_loop.md
+      - 数据库与指定日预测: database_and_forecast.md
+      - 数据契约: data_contract.md
+      - 指标字典: metric_dictionary.md
+      - 威胁模型: threat_model.md
+  - 合作开发:
+      - 项目结构: project_structure_cn.md
+      - 开发者指南: developer_guide_cn.md
+      - 产品边界: sanitized_requirements.md
+      - 开源复用评估: open_source_reuse_assessment.md
 
 plugins:
   - search

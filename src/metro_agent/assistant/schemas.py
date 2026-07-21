@@ -176,6 +176,59 @@ class AssistantMessageRequest(StrictModel):
     message: str = Field(min_length=1, max_length=4000)
 
 
+class ModelRuntime(StrictModel):
+    provider: str = "unknown"
+    model: str | None = None
+    mode: Literal["offline_deterministic", "local_governed_model", "openai_compatible"] = (
+        "offline_deterministic"
+    )
+    execution_role: Literal["deterministic_active", "model_active", "shadow_report_only"] = (
+        "deterministic_active"
+    )
+    real_model_configured: bool = False
+    real_model_active: bool = False
+    invocation_status: Literal["not_applicable", "configured", "succeeded", "failed", "partial"] = (
+        "not_applicable"
+    )
+    usage_reporting: Literal["not_applicable", "unavailable", "partial", "complete"] = (
+        "not_applicable"
+    )
+    provider_calls: int = Field(default=0, ge=0)
+    model_calls: int = Field(default=0, ge=0)
+    input_tokens: int | None = Field(default=None, ge=0)
+    output_tokens: int | None = Field(default=None, ge=0)
+    reasoning_tokens: int | None = Field(default=None, ge=0)
+    total_tokens: int | None = Field(default=None, ge=0)
+    elapsed_seconds: float | None = Field(default=None, ge=0)
+
+
+class AssistantArchitectureStage(StrictModel):
+    id: str
+    label: str
+    owner: Literal["llm", "deterministic", "human"]
+    detail: str
+
+
+class ValidationMilestone(StrictModel):
+    id: str
+    label: str
+    status: Literal["verified", "partial", "not_started"]
+    evidence: str
+    scope: str
+
+
+class AssistantCapabilities(StrictModel):
+    implementation_status: Literal["local_governed_prototype"]
+    data_scope: Literal["synthetic"]
+    active_runtime: ModelRuntime
+    architecture: list[AssistantArchitectureStage]
+    model_responsibilities: list[str]
+    deterministic_controls: list[str]
+    prohibited_model_actions: list[str]
+    validated_milestones: list[ValidationMilestone]
+    production_gaps: list[str]
+
+
 class SessionRecord(StrictModel):
     session_id: str
     created_at: str
@@ -188,6 +241,7 @@ class RunRecord(StrictModel):
     created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     status: Literal["running", "completed", "needs_clarification", "failed"] = "running"
     provider: str
+    model_runtime: ModelRuntime = Field(default_factory=ModelRuntime)
     original_question: str
     selected_context: dict[str, Any] = Field(default_factory=dict)
     intent: IntentEnvelope | None = None

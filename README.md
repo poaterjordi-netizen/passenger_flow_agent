@@ -22,7 +22,7 @@ Version 0.3 adds an explicit, bounded MySQL adapter and ports the active designa
 
 The designated-day forecast copies the station inflow/outflow pattern from a reference date to a target calendar date and adds the scheme metadata. It returns a local CSV/JSON artifact; it does not insert forecasts or update scheme state.
 
-Version 0.4 adds the governed assistant workflow: natural-language intent, a structured task graph, an allowlisted deterministic tool registry, Evidence Packets, response verification, replayable trajectories, four assistant APIs, a Web intelligent-analysis page, and 100 end-to-end Gold Cases. Local and CI execution defaults to an offline `FakeProvider`; an isolated OpenAI-compatible adapter can use GPT-5.6-sol when runtime credentials are explicitly injected.
+Version 0.4 adds the governed assistant workflow: natural-language intent, a structured task graph, an allowlisted deterministic tool registry, Evidence Packets, response verification, replayable trajectories, six assistant API capabilities/routes, a Web intelligent-analysis page, and 100 end-to-end Gold Cases. Local and CI execution defaults to an offline `FakeProvider`; isolated Hermes Codex shadow and OpenAI-compatible adapters can use GPT-5.6-sol only when the corresponding runtime environment is explicitly configured.
 
 The project still does **not** execute model-generated SQL, send notifications, schedule background reports, connect real camera/bus/GIS feeds, take automatic operating actions, or claim production prediction accuracy. Cross-network, event, real-time, SOP and geo paths use explicitly synthetic fixtures and remain behind later production and human gates.
 

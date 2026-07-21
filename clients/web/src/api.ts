@@ -1,5 +1,6 @@
 import { client } from "./client/client.gen"
 import {
+  assistantCapabilitiesApiV1AssistantCapabilitiesGet,
   assistantMessageApiV1AssistantSessionsSessionIdMessagesPost,
   auditApiV1AuditsAuditIdGet,
   catalogApiV1CatalogGet,
@@ -14,13 +15,23 @@ client.setConfig({ baseUrl: import.meta.env.VITE_API_URL || "" })
 
 function unwrap<T>(response: { data?: T; error?: unknown }): T {
   if (response.error) {
-    const message =
+    const code =
       typeof response.error === "object" &&
       response.error !== null &&
-      "detail" in response.error
-        ? JSON.stringify(response.error)
-        : "请求失败，请检查后端服务和查询范围"
-    throw new Error(message)
+      "error" in response.error &&
+      typeof response.error.error === "object" &&
+      response.error.error !== null &&
+      "code" in response.error.error
+        ? String(response.error.error.code)
+        : null
+    const safeMessages: Record<string, string> = {
+      invalid_request: "请求未通过安全校验，请缩小范围或调整问题后重试",
+      provider_failure:
+        "模型服务调用失败，本次没有绕过 verifier 或自动切换 Provider",
+    }
+    throw new Error(
+      (code && safeMessages[code]) || "请求失败，请检查后端服务和查询范围",
+    )
   }
   if (!response.data) throw new Error("服务未返回数据")
   return response.data
@@ -52,11 +63,27 @@ export async function createAssistantSession() {
   return unwrap(await createAssistantSessionApiV1AssistantSessionsPost())
 }
 
+export async function getAssistantCapabilities() {
+  return unwrap(await assistantCapabilitiesApiV1AssistantCapabilitiesGet())
+}
+
 export async function sendAssistantMessage(sessionId: string, message: string) {
-  return unwrap(
-    await assistantMessageApiV1AssistantSessionsSessionIdMessagesPost({
-      path: { session_id: sessionId },
-      body: { message },
-    }),
-  )
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), 30_000)
+  try {
+    return unwrap(
+      await assistantMessageApiV1AssistantSessionsSessionIdMessagesPost({
+        path: { session_id: sessionId },
+        body: { message },
+        signal: controller.signal,
+      }),
+    )
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error("分析请求已在 30 秒后停止；后端可能仍在收尾，请稍后重试")
+    }
+    throw error
+  } finally {
+    window.clearTimeout(timeout)
+  }
 }

@@ -27,6 +27,7 @@ import type { ComponentType, FormEvent } from "react"
 import { lazy, Suspense, useMemo, useState } from "react"
 import {
   createAssistantSession,
+  getAssistantCapabilities,
   getAudit,
   getCatalog,
   getHealth,
@@ -35,6 +36,7 @@ import {
   sendAssistantMessage,
 } from "./api"
 import type {
+  AssistantCapabilities,
   AuditSummary,
   CatalogResponse,
   QueryRequest,
@@ -144,7 +146,10 @@ function displayTime(value: string) {
 
 function ApiError({ error }: { error: unknown }) {
   return (
-    <div className="rounded-xl border border-rose-400/20 bg-rose-400/8 p-4 text-sm text-rose-200">
+    <div
+      role="alert"
+      className="rounded-xl border border-rose-400/20 bg-rose-400/8 p-4 text-sm text-rose-200"
+    >
       {error instanceof Error ? error.message : "请求失败，请检查服务状态"}
     </div>
   )
@@ -491,6 +496,8 @@ function AssistantRunView({ run }: { run: RunRecord }) {
     tableRows.some((row) => typeof row[column] === "number"),
   )
   const labelColumn = columns.find((column) => column !== numericColumn)
+  const verificationPassed = run.verification?.valid === true
+  const verificationFailed = run.verification?.valid === false
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
@@ -503,9 +510,154 @@ function AssistantRunView({ run }: { run: RunRecord }) {
           {run.run_id}
         </span>
       </div>
-      <div className="rounded-xl border border-cyan-400/12 bg-cyan-400/5 p-4">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-cyan-300">
-          证据化回答
+      <div className="grid gap-3 rounded-xl border border-violet-400/12 bg-violet-400/5 p-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-500">
+            本次 Provider
+          </div>
+          <div className="mt-1 break-all text-sm font-medium text-violet-200">
+            {run.model_runtime?.provider ?? run.provider}
+            {run.model_runtime?.model ? ` · ${run.model_runtime.model}` : ""}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-500">
+            运行模式
+          </div>
+          <div className="mt-1 text-sm text-slate-200">
+            {run.model_runtime?.mode === "local_governed_model"
+              ? "Hermes 本地受治理模型"
+              : run.model_runtime?.mode === "openai_compatible"
+                ? "OpenAI-compatible"
+                : "离线确定性"}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-500">
+            调用职责
+          </div>
+          <div className="mt-1 text-sm text-slate-200">
+            {run.model_runtime?.provider_calls == null
+              ? "Provider 阶段未报告"
+              : `${run.model_runtime.provider_calls} 个 provider 阶段`}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-500">
+            真实模型
+          </div>
+          <div className="mt-1 text-sm text-slate-200">
+            {run.model_runtime?.real_model_configured
+              ? `${run.model_runtime.model_calls} 次实际 API 调用`
+              : "未配置真实模型"}
+          </div>
+          <div className="mt-1 text-[11px] text-slate-500">
+            状态：{run.model_runtime?.invocation_status ?? "not_applicable"}
+          </div>
+          <div className="mt-1 text-[11px] text-slate-500">
+            执行角色：{run.model_runtime?.execution_role ?? "未报告"}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-500">
+            用量 / 时延
+          </div>
+          <div className="mt-1 text-sm text-slate-200">
+            {run.model_runtime?.total_tokens != null
+              ? `${formatNumber(run.model_runtime.total_tokens)} tokens`
+              : "未报告 token"}
+            {run.model_runtime?.elapsed_seconds != null
+              ? ` · ${run.model_runtime.elapsed_seconds}s`
+              : ""}
+          </div>
+          <div className="mt-1 text-[11px] text-slate-500">
+            usage：{run.model_runtime?.usage_reporting ?? "not_applicable"}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-500">
+            Token 明细
+          </div>
+          <div className="mt-1 text-sm leading-6 text-slate-200">
+            输入 {run.model_runtime?.input_tokens ?? "—"} · 输出{" "}
+            {run.model_runtime?.output_tokens ?? "—"} · 推理{" "}
+            {run.model_runtime?.reasoning_tokens ?? "—"}
+          </div>
+        </div>
+      </div>
+      <div
+        className={cn(
+          "rounded-xl border p-4",
+          verificationPassed
+            ? "border-emerald-400/12 bg-emerald-400/5"
+            : verificationFailed
+              ? "border-rose-400/20 bg-rose-400/8"
+              : "border-white/8 bg-white/3",
+        )}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <ShieldCheck
+            className={cn(
+              "h-4 w-4",
+              verificationPassed
+                ? "text-emerald-300"
+                : verificationFailed
+                  ? "text-rose-300"
+                  : "text-slate-400",
+            )}
+          />
+          <span className="text-sm font-semibold text-slate-200">
+            {verificationPassed
+              ? "确定性 verifier 已通过"
+              : verificationFailed
+                ? "核验失败：禁止采纳"
+                : "等待 verifier"}
+          </span>
+          <Badge
+            tone={
+              verificationPassed
+                ? "green"
+                : verificationFailed
+                  ? "amber"
+                  : "slate"
+            }
+          >
+            {run.verification?.supported_evidence_refs?.length ?? 0} 条证据引用
+          </Badge>
+        </div>
+        {run.verification?.warnings?.length ? (
+          <ul className="mt-2 space-y-1 text-xs text-amber-200/75">
+            {run.verification.warnings.map((warning) => (
+              <li key={warning}>• {warning}</li>
+            ))}
+          </ul>
+        ) : null}
+        {run.verification?.errors?.length ? (
+          <ul
+            className="mt-2 space-y-1 text-xs text-rose-200"
+            aria-label="核验错误"
+          >
+            {run.verification.errors.map((error) => (
+              <li key={error}>• {error}</li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+      <div
+        className={cn(
+          "rounded-xl border p-4",
+          verificationPassed
+            ? "border-cyan-400/12 bg-cyan-400/5"
+            : "border-rose-400/20 bg-rose-400/8",
+        )}
+      >
+        <div
+          className={cn(
+            "mb-2 text-xs font-semibold uppercase tracking-wider",
+            verificationPassed ? "text-cyan-300" : "text-rose-200",
+          )}
+        >
+          {verificationPassed ? "证据化回答" : "未核验回答（禁止采纳）"}
         </div>
         <p className="text-sm leading-7 text-slate-200">
           {run.response?.answer ?? "尚未生成回答"}
@@ -664,7 +816,7 @@ function AssistantRunView({ run }: { run: RunRecord }) {
           </div>
         </div>
       ) : null}
-      {run.response?.recommendations?.length ? (
+      {run.response?.recommendations?.length && verificationPassed ? (
         <div className="rounded-xl border border-amber-300/12 bg-amber-300/5 p-4">
           <div className="mb-2 text-sm font-semibold text-amber-200">
             处置建议（待人工确认）
@@ -675,12 +827,186 @@ function AssistantRunView({ run }: { run: RunRecord }) {
             ))}
           </ul>
         </div>
+      ) : run.response?.recommendations?.length && verificationFailed ? (
+        <div className="rounded-xl border border-rose-400/20 bg-rose-400/8 p-4 text-sm text-rose-200">
+          未核验处置建议已隐藏，禁止执行或采纳。
+        </div>
       ) : null}
     </div>
   )
 }
 
+function AssistantCapabilityOverview({
+  capabilities,
+}: {
+  capabilities: AssistantCapabilities
+}) {
+  return (
+    <div className="space-y-5">
+      <Card>
+        <CardHeader>
+          <div>
+            <h2 className="font-semibold text-white">大模型运行结构</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              当前 Provider：{capabilities.active_runtime.provider}
+              {capabilities.active_runtime.model
+                ? ` · ${capabilities.active_runtime.model}`
+                : " · 不发起外部模型请求"}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge tone="slate">{capabilities.data_scope} data</Badge>
+            <Badge
+              tone={
+                capabilities.active_runtime.real_model_configured
+                  ? "green"
+                  : "cyan"
+              }
+            >
+              {capabilities.active_runtime.real_model_configured
+                ? "真实模型已配置，尚未代表本次已调用"
+                : "本次不产生模型费用"}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-2 md:grid-cols-4 xl:grid-cols-7">
+            {capabilities.architecture.map((stage, index) => (
+              <div
+                key={stage.id}
+                className="rounded-xl border border-white/7 bg-white/3 p-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-[10px] text-slate-600">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <Badge
+                    tone={
+                      stage.owner === "llm"
+                        ? "cyan"
+                        : stage.owner === "human"
+                          ? "amber"
+                          : "slate"
+                    }
+                  >
+                    {stage.owner === "llm"
+                      ? "大模型"
+                      : stage.owner === "human"
+                        ? "人工"
+                        : "确定性"}
+                  </Badge>
+                </div>
+                <div className="mt-3 text-sm font-semibold text-slate-200">
+                  {stage.label}
+                </div>
+                <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                  {stage.detail}
+                </p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            <div className="rounded-xl border border-cyan-400/10 bg-cyan-400/4 p-4">
+              <div className="text-xs font-semibold text-cyan-300">
+                大模型负责
+              </div>
+              <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-400">
+                {capabilities.model_responsibilities.map((item) => (
+                  <li key={item}>• {item}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="rounded-xl border border-emerald-400/10 bg-emerald-400/4 p-4">
+              <div className="text-xs font-semibold text-emerald-300">
+                确定性保护
+              </div>
+              <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-400">
+                {capabilities.deterministic_controls.map((item) => (
+                  <li key={item}>• {item}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="rounded-xl border border-amber-300/10 bg-amber-300/4 p-4">
+              <div className="text-xs font-semibold text-amber-200">
+                大模型不保存客流事实
+              </div>
+              <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-400">
+                {capabilities.prohibited_model_actions.map((item) => (
+                  <li key={item}>• {item}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <div>
+            <h2 className="font-semibold text-white">验证进展与生产边界</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              展示已经真实验证的范围，同时保留尚未完成项。
+            </p>
+          </div>
+          <Badge tone="cyan">v0.4 governed prototype</Badge>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {capabilities.validated_milestones.map((milestone) => (
+              <div
+                key={milestone.id}
+                className="rounded-xl border border-white/7 bg-white/3 p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="text-sm font-semibold text-slate-200">
+                    {milestone.label}
+                  </div>
+                  <Badge
+                    tone={
+                      milestone.status === "verified"
+                        ? "green"
+                        : milestone.status === "partial"
+                          ? "amber"
+                          : "slate"
+                    }
+                  >
+                    {milestone.status === "verified"
+                      ? "已验证"
+                      : milestone.status === "partial"
+                        ? "历史记录"
+                        : "未完成"}
+                  </Badge>
+                </div>
+                <div className="mt-3 font-mono text-2xl font-semibold text-cyan-300">
+                  {milestone.evidence}
+                </div>
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  {milestone.scope}
+                </p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 rounded-xl border border-amber-300/10 bg-amber-300/4 p-4">
+            <div className="text-xs font-semibold text-amber-200">
+              尚未生产化
+            </div>
+            <div className="mt-2 grid gap-1 text-xs leading-5 text-slate-500 md:grid-cols-2">
+              {capabilities.production_gaps.map((item) => (
+                <div key={item}>• {item}</div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
 function AssistantPage() {
+  const capabilities = useQuery({
+    queryKey: ["assistant-capabilities"],
+    queryFn: getAssistantCapabilities,
+    staleTime: 30_000,
+  })
   const session = useQuery({
     queryKey: ["assistant-session"],
     queryFn: createAssistantSession,
@@ -688,13 +1014,19 @@ function AssistantPage() {
   })
   const [message, setMessage] = useState(assistantExamples[0])
   const [runs, setRuns] = useState<RunRecord[]>([])
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const mutation = useMutation({
     mutationFn: async (value: string) => {
       if (!session.data) throw new Error("智能分析会话尚未就绪")
       return sendAssistantMessage(session.data.session_id, value)
     },
-    onSuccess: (run) => setRuns((current) => [...current, run]),
+    onSuccess: (run) => {
+      setRuns((current) => [...current, run])
+      setSelectedRunId(run.run_id)
+    },
   })
+  const selectedRun =
+    runs.find((run) => run.run_id === selectedRunId) ?? mutation.data ?? null
   function submit(event: FormEvent) {
     event.preventDefault()
     if (message.trim()) mutation.mutate(message.trim())
@@ -704,16 +1036,51 @@ function AssistantPage() {
       <PageHeading
         eyebrow="Governed agent workflow"
         title="地铁客流智能分析"
-        description="同一可替换模型分阶段完成意图理解、任务规划、工具调用、证据综合和回答；确定性工具负责所有数字、统计、预测情景和 GIS 数据。"
-        action={<Badge tone="cyan">完整轨迹可回放</Badge>}
+        description="大模型负责理解、受约束规划与证据化表达；数据库和确定性工具负责事实与计算，verifier 和人工闸门负责治理。"
+        action={
+          capabilities.isPending ? (
+            <Badge tone="slate">正在检测运行时</Badge>
+          ) : capabilities.isError ? (
+            <Badge tone="amber">运行时状态未知</Badge>
+          ) : (
+            <Badge
+              tone={
+                capabilities.data?.active_runtime.real_model_configured
+                  ? "green"
+                  : "cyan"
+              }
+            >
+              {capabilities.data?.active_runtime.real_model_configured
+                ? `已配置：${capabilities.data.active_runtime.model}（尚未调用）`
+                : "当前运行：离线确定性基线"}
+            </Badge>
+          )
+        }
       />
+      {capabilities.isError ? (
+        <div className="space-y-2">
+          <ApiError error={capabilities.error} />
+          <button
+            type="button"
+            className="text-xs text-cyan-300 hover:text-cyan-200"
+            onClick={() => capabilities.refetch()}
+          >
+            重新读取运行能力
+          </button>
+        </div>
+      ) : capabilities.data ? (
+        <AssistantCapabilityOverview capabilities={capabilities.data} />
+      ) : (
+        <div className="h-44 animate-pulse rounded-2xl border border-white/6 bg-white/3" />
+      )}
       <div className="grid gap-5 xl:grid-cols-[380px_1fr]">
         <Card className="h-fit">
           <CardHeader>
             <div>
               <h2 className="font-semibold text-white">业务问题</h2>
               <p className="mt-1 text-xs text-slate-500">
-                当前默认离线 FakeProvider；配置后可替换 GPT-5.6-sol
+                运行时 Provider 由后端环境选择，界面不会把 shadow
+                验证冒充生产部署
               </p>
             </div>
             <Sparkles className="h-5 w-5 text-cyan-300" />
@@ -722,14 +1089,28 @@ function AssistantPage() {
             {runs.length ? (
               <div className="mb-4 max-h-72 space-y-3 overflow-auto rounded-xl border border-white/7 bg-black/10 p-3">
                 {runs.map((run) => (
-                  <div key={run.run_id} className="space-y-1 text-xs">
+                  <button
+                    type="button"
+                    key={run.run_id}
+                    aria-pressed={run.run_id === selectedRun?.run_id}
+                    onClick={() => setSelectedRunId(run.run_id)}
+                    className={cn(
+                      "block w-full space-y-1 rounded-lg border p-1 text-left text-xs",
+                      run.run_id === selectedRun?.run_id
+                        ? "border-cyan-400/30 bg-cyan-400/5"
+                        : "border-transparent hover:border-white/10",
+                    )}
+                  >
                     <div className="rounded-lg bg-cyan-400/7 p-2 text-cyan-100">
                       用户：{run.original_question}
                     </div>
                     <div className="rounded-lg bg-white/4 p-2 leading-5 text-slate-400">
-                      助手：{run.response?.answer ?? run.status}
+                      助手：
+                      {run.verification?.valid === false
+                        ? `未核验（禁止采纳）· ${run.response?.answer ?? run.status}`
+                        : (run.response?.answer ?? run.status)}
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             ) : null}
@@ -741,8 +1122,17 @@ function AssistantPage() {
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
                   maxLength={4000}
+                  disabled={mutation.isPending}
                 />
               </Field>
+              <div className="flex justify-between text-[11px] text-slate-600">
+                <span aria-live="polite">
+                  {mutation.isPending
+                    ? "状态机执行中，请勿重复提交"
+                    : "最多 4000 个字符"}
+                </span>
+                <span>{message.length}/4000</span>
+              </div>
               <div className="flex flex-wrap gap-2">
                 {assistantExamples.map((example) => (
                   <button
@@ -757,7 +1147,9 @@ function AssistantPage() {
               </div>
               <Button
                 className="w-full"
-                disabled={!session.data || mutation.isPending}
+                disabled={
+                  !session.data || mutation.isPending || !message.trim()
+                }
               >
                 {mutation.isPending ? (
                   <RefreshCw className="h-4 w-4 animate-spin" />
@@ -777,8 +1169,10 @@ function AssistantPage() {
                 {session.data?.session_id ?? "正在创建会话"}
               </p>
             </div>
-            {mutation.data?.verification?.valid ? (
+            {selectedRun?.verification?.valid === true ? (
               <Badge tone="green">Evidence verified</Badge>
+            ) : selectedRun?.verification?.valid === false ? (
+              <Badge tone="amber">核验失败 · 禁止采纳</Badge>
             ) : (
               <Badge tone="slate">等待任务</Badge>
             )}
@@ -787,9 +1181,15 @@ function AssistantPage() {
             {session.isError ? (
               <ApiError error={session.error} />
             ) : mutation.isError ? (
-              <ApiError error={mutation.error} />
-            ) : mutation.data ? (
-              <AssistantRunView run={mutation.data} />
+              <div className="space-y-3" aria-live="assertive">
+                <ApiError error={mutation.error} />
+                <p className="text-xs text-slate-500">
+                  本次失败不会自动切换 Provider、绕过 verifier
+                  或重复调用模型；可确认问题后重新提交。
+                </p>
+              </div>
+            ) : selectedRun ? (
+              <AssistantRunView run={selectedRun} />
             ) : (
               <EmptyState text="输入业务问题，查看计划、工具时间线、Evidence Packet 和回答" />
             )}

@@ -21,6 +21,7 @@ from metro_agent.api.service import SyntheticApiService
 from metro_agent.api.settings import ApiSettings
 from metro_agent.assistant.orchestrator import AssistantService
 from metro_agent.assistant.schemas import (
+    AssistantCapabilities,
     AssistantMessageRequest,
     HumanFeedbackRequest,
     RunRecord,
@@ -81,10 +82,27 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         )
 
     @application.exception_handler(ValueError)
-    async def invalid_request_handler(_: Request, exc: ValueError) -> JSONResponse:
+    async def invalid_request_handler(_: Request, __: ValueError) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            content={"error": {"code": "invalid_request", "message": str(exc)}},
+            content={
+                "error": {
+                    "code": "invalid_request",
+                    "message": "request failed validation",
+                }
+            },
+        )
+
+    @application.exception_handler(RuntimeError)
+    async def provider_failure_handler(_: Request, __: RuntimeError) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={
+                "error": {
+                    "code": "provider_failure",
+                    "message": "assistant provider failed safely",
+                }
+            },
         )
 
     @application.get("/", include_in_schema=False)
@@ -102,6 +120,16 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         }
 
     router = APIRouter(prefix="/api/v1", dependencies=[Depends(_authorize)])
+
+    @router.get(
+        "/assistant/capabilities",
+        response_model=AssistantCapabilities,
+        tags=["assistant"],
+    )
+    def assistant_capabilities(
+        assistant: AssistantService = Depends(_assistant),
+    ) -> dict:
+        return assistant.capabilities()
 
     @router.get("/catalog", response_model=CatalogResponse, tags=["catalog"])
     def catalog(service: SyntheticApiService = Depends(_service)) -> dict:

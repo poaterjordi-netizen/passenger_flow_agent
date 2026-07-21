@@ -503,6 +503,8 @@ class OpenAICompatibleProvider:
         ).rstrip("/")
         self.model = model
         self.timeout = timeout
+        self.name = f"openai-compatible:{model}"
+        self.usage_records: list[dict[str, Any]] = []
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY is required for OpenAICompatibleProvider")
 
@@ -510,7 +512,11 @@ class OpenAICompatibleProvider:
         self, prompt: str, schema: type[StructuredT], *, context: dict[str, Any]
     ) -> StructuredT:
         payload = self._request(prompt, context, schema)
-        return schema.model_validate_json(payload)
+        try:
+            return schema.model_validate_json(payload)
+        except (ValueError, TypeError) as exc:
+            self._mark_last_usage_failed()
+            raise RuntimeError("language model returned invalid structured output") from exc
 
     def generate_tool_calls(self, prompt: str, *, context: dict[str, Any]) -> TaskPlan:
         return self.generate_structured(prompt, TaskPlan, context=context)
@@ -560,6 +566,7 @@ class OpenAICompatibleProvider:
             raise RuntimeError("language model streaming request failed") from exc
 
     def _request(self, prompt: str, context: dict[str, Any], schema: type[BaseModel] | None) -> str:
+        started = time.monotonic()
         body: dict[str, Any] = {
             "model": self.model,
             "messages": [
@@ -590,11 +597,51 @@ class OpenAICompatibleProvider:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            self.usage_records.append(
+                {
+                    "api_calls": 1,
+                    "completed": False,
+                    "failed": True,
+                    "elapsed_seconds": round(time.monotonic() - started, 3),
+                }
+            )
             raise RuntimeError("language model request failed") from exc
+        usage = payload.get("usage") if isinstance(payload, dict) else None
+        record: dict[str, Any] = {
+            "api_calls": 1,
+            "completed": True,
+            "failed": False,
+            "elapsed_seconds": round(time.monotonic() - started, 3),
+        }
+        if isinstance(usage, dict):
+            mapping = {
+                "prompt_tokens": "input_tokens",
+                "completion_tokens": "output_tokens",
+                "total_tokens": "total_tokens",
+            }
+            for source, target in mapping.items():
+                value = usage.get(source)
+                if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                    record[target] = value
+            details = usage.get("completion_tokens_details")
+            if isinstance(details, dict):
+                reasoning = details.get("reasoning_tokens")
+                if (
+                    isinstance(reasoning, int)
+                    and not isinstance(reasoning, bool)
+                    and reasoning >= 0
+                ):
+                    record["reasoning_tokens"] = reasoning
+        self.usage_records.append(record)
         try:
             return payload["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
+            self._mark_last_usage_failed()
             raise RuntimeError("language model returned an invalid response") from exc
+
+    def _mark_last_usage_failed(self) -> None:
+        if self.usage_records:
+            self.usage_records[-1].update({"completed": False, "failed": True})
 
 
 class HermesCodexProvider:
@@ -648,6 +695,7 @@ class HermesCodexProvider:
         try:
             return schema.model_validate_json(_strip_json_fence(payload))
         except (ValueError, TypeError) as exc:
+            self._mark_last_usage_failed()
             raise RuntimeError("Hermes Codex returned invalid structured output") from exc
 
     def generate_tool_calls(self, prompt: str, *, context: dict[str, Any]) -> TaskPlan:
@@ -719,14 +767,26 @@ class HermesCodexProvider:
                     check=False,
                 )
             except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+                self.usage_records.append(
+                    {
+                        "api_calls": 1,
+                        "completed": False,
+                        "failed": True,
+                        "elapsed_seconds": round(time.monotonic() - started, 3),
+                    }
+                )
                 raise RuntimeError("Hermes Codex bridge invocation failed") from exc
             self._record_usage(usage_path, time.monotonic() - started)
         if completed.returncode != 0 or not completed.stdout.strip():
+            self._mark_last_usage_failed()
             raise RuntimeError("Hermes Codex bridge request failed")
         return completed.stdout.strip()
 
     def _record_usage(self, path: str, elapsed_seconds: float) -> None:
-        safe: dict[str, Any] = {"elapsed_seconds": round(elapsed_seconds, 3)}
+        safe: dict[str, Any] = {
+            "api_calls": 1,
+            "elapsed_seconds": round(elapsed_seconds, 3),
+        }
         try:
             with open(path, encoding="utf-8") as usage_file:
                 payload = json.load(usage_file)
@@ -748,6 +808,10 @@ class HermesCodexProvider:
             if key in payload:
                 safe[key] = payload[key]
         self.usage_records.append(safe)
+
+    def _mark_last_usage_failed(self) -> None:
+        if self.usage_records:
+            self.usage_records[-1].update({"completed": False, "failed": True})
 
 
 def _strip_json_fence(payload: str) -> str:

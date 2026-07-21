@@ -44,6 +44,7 @@ class ApiApplicationTests(unittest.TestCase):
         self.assertIn("/api/v1/queries", schema["paths"])
         self.assertIn("/api/v1/forecasts/designated-day", schema["paths"])
         self.assertIn("/api/v1/assistant/sessions", schema["paths"])
+        self.assertIn("/api/v1/assistant/capabilities", schema["paths"])
         self.assertIn("/api/v1/assistant/sessions/{session_id}/messages", schema["paths"])
         self.assertIn("/api/v1/assistant/runs/{run_id}", schema["paths"])
         self.assertIn("/api/v1/assistant/runs/{run_id}/events", schema["paths"])
@@ -52,6 +53,18 @@ class ApiApplicationTests(unittest.TestCase):
         self.assertNotIn("arbitrary-sql", serialized)
         self.assertEqual(self.endpoint("/health", "GET")()["data_scope"], "synthetic")
         self.assertEqual(self.endpoint("/", "GET")()["docs"], "/docs")
+
+        capabilities = self.endpoint("/api/v1/assistant/capabilities", "GET")(
+            assistant=self.app.state.assistant
+        )
+        self.assertEqual(capabilities["implementation_status"], "local_governed_prototype")
+        self.assertEqual(capabilities["active_runtime"]["provider"], "fake-governed")
+        self.assertEqual(capabilities["active_runtime"]["mode"], "offline_deterministic")
+        self.assertFalse(capabilities["active_runtime"]["real_model_configured"])
+        self.assertFalse(capabilities["active_runtime"]["real_model_active"])
+        self.assertEqual(capabilities["active_runtime"]["invocation_status"], "not_applicable")
+        self.assertEqual(capabilities["validated_milestones"][0]["evidence"], "100/100")
+        self.assertEqual(capabilities["validated_milestones"][1]["evidence"], "3/3")
 
     def test_route_functions_delegate_to_synthetic_service(self) -> None:
         service = self.app.state.service
@@ -105,6 +118,10 @@ class ApiApplicationTests(unittest.TestCase):
         )
         self.assertEqual(run["status"], "completed")
         self.assertTrue(run["verification"]["valid"])
+        self.assertEqual(run["model_runtime"]["provider_calls"], 3)
+        self.assertEqual(run["model_runtime"]["model_calls"], 0)
+        self.assertEqual(run["model_runtime"]["usage_reporting"], "not_applicable")
+        self.assertIsNone(run["model_runtime"]["model"])
         replay = self.endpoint("/api/v1/assistant/runs/{run_id}", "GET")(
             run_id=run["run_id"], assistant=assistant
         )
@@ -155,9 +172,20 @@ class ApiApplicationTests(unittest.TestCase):
 
     def test_value_error_handler_returns_redacted_shape(self) -> None:
         handler = self.app.exception_handlers[ValueError]
-        response = asyncio.run(handler(None, ValueError("bad query")))
+        response = asyncio.run(handler(None, ValueError("secret backend path /tmp/private")))
         self.assertEqual(response.status_code, 422)
-        self.assertEqual(json.loads(response.body)["error"]["code"], "invalid_request")
+        payload = json.loads(response.body)
+        self.assertEqual(payload["error"]["code"], "invalid_request")
+        self.assertEqual(payload["error"]["message"], "request failed validation")
+        self.assertNotIn("private", response.body.decode())
+
+    def test_runtime_error_handler_returns_redacted_provider_failure(self) -> None:
+        handler = self.app.exception_handlers[RuntimeError]
+        response = asyncio.run(handler(None, RuntimeError("token=secret-internal-detail")))
+        self.assertEqual(response.status_code, 502)
+        payload = json.loads(response.body)
+        self.assertEqual(payload["error"]["code"], "provider_failure")
+        self.assertNotIn("secret", response.body.decode())
 
     def test_cors_is_opt_in(self) -> None:
         cors_settings = ApiSettings(
