@@ -21,6 +21,7 @@ nav:
       - 使用指南: user_guide_cn.md
       - Web 与部署: web_and_deployment.md
       - 微信小程序: mobile_miniprogram.md
+      - 真实数据受控体验站: real_shadow_demo.md
   - 系统设计:
       - 总体架构: architecture.md
       - 智能体工作流: assistant_architecture.md

@@ -14,6 +14,16 @@ import type { ForecastRequest, QueryRequest } from "./client/types.gen"
 
 client.setConfig({ baseUrl: import.meta.env.VITE_API_URL || "" })
 
+const configuredAssistantTimeout = Number(
+  import.meta.env.VITE_ASSISTANT_TIMEOUT_MS || "30000",
+)
+const assistantTimeoutMs =
+  Number.isFinite(configuredAssistantTimeout) &&
+  configuredAssistantTimeout >= 1_000 &&
+  configuredAssistantTimeout <= 300_000
+    ? configuredAssistantTimeout
+    : 30_000
+
 function unwrap<T>(response: { data?: T; error?: unknown }): T {
   if (response.error) {
     const code =
@@ -75,7 +85,10 @@ export async function getAssistantCapabilities() {
 
 export async function sendAssistantMessage(sessionId: string, message: string) {
   const controller = new AbortController()
-  const timeout = window.setTimeout(() => controller.abort(), 30_000)
+  const timeout = window.setTimeout(
+    () => controller.abort(),
+    assistantTimeoutMs,
+  )
   try {
     return unwrap(
       await assistantMessageApiV1AssistantSessionsSessionIdMessagesPost({
@@ -86,7 +99,9 @@ export async function sendAssistantMessage(sessionId: string, message: string) {
     )
   } catch (error) {
     if (controller.signal.aborted) {
-      throw new Error("分析请求已在 30 秒后停止；后端可能仍在收尾，请稍后重试")
+      throw new Error(
+        `分析请求已在 ${Math.round(assistantTimeoutMs / 1_000)} 秒后停止；后端可能仍在收尾，请稍后重试`,
+      )
     }
     throw error
   } finally {

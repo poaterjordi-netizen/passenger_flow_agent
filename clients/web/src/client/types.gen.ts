@@ -166,7 +166,7 @@ export type CapabilityMatch = {
     /**
      * Answer Policy
      */
-    answer_policy: 'deterministic_table' | 'deterministic_summary' | 'llm_synthesis' | 'llm_general';
+    answer_policy: 'deterministic_table' | 'deterministic_summary' | 'llm_synthesis' | 'llm_general' | 'llm_hybrid';
     /**
      * Capability Id
      */
@@ -390,6 +390,70 @@ export type DatasetEligibility = {
      * Requires Human Confirmation
      */
     requires_human_confirmation?: boolean;
+};
+
+/**
+ * EntityCandidate
+ */
+export type EntityCandidate = {
+    /**
+     * Confidence
+     */
+    confidence: number;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Source
+     */
+    source: 'registered_catalog' | 'observed_database_entity';
+    /**
+     * Type
+     */
+    type: 'line' | 'station';
+};
+
+/**
+ * EntityResolution
+ */
+export type EntityResolution = {
+    /**
+     * Candidates
+     */
+    candidates?: Array<EntityCandidate>;
+    /**
+     * Raw Text
+     */
+    raw_text: string;
+    /**
+     * Reference
+     */
+    reference?: 'named' | 'collection' | 'deictic';
+    /**
+     * Role
+     */
+    role?: 'subject' | 'origin' | 'destination' | 'context';
+    /**
+     * Selected Id
+     */
+    selected_id?: string | null;
+    /**
+     * Selected Name
+     */
+    selected_name?: string | null;
+    /**
+     * Status
+     */
+    status: 'resolved' | 'ambiguous' | 'not_found' | 'not_applicable';
+    /**
+     * Type
+     */
+    type: 'line' | 'station' | 'place' | 'event' | 'unknown';
 };
 
 /**
@@ -1004,7 +1068,7 @@ export type IntentEnvelope = {
     /**
      * Task Type
      */
-    task_type: 'query' | 'compare' | 'forecast' | 'alert' | 'transfer' | 'geo' | 'correlation' | 'diagnosis' | 'trend' | 'report' | 'travel' | 'help' | 'general';
+    task_type: 'query' | 'compare' | 'forecast' | 'alert' | 'transfer' | 'geo' | 'correlation' | 'diagnosis' | 'trend' | 'report' | 'travel' | 'help' | 'general' | 'external';
     /**
      * Time Grain
      */
@@ -1070,6 +1134,28 @@ export type MetricCatalogItem = {
 };
 
 /**
+ * MetricResolution
+ */
+export type MetricResolution = {
+    /**
+     * Candidates
+     */
+    candidates?: Array<string>;
+    /**
+     * Raw Text
+     */
+    raw_text: string;
+    /**
+     * Selected Metric
+     */
+    selected_metric?: string | null;
+    /**
+     * Status
+     */
+    status: 'resolved' | 'ambiguous' | 'not_found' | 'defaulted';
+};
+
+/**
  * ModelEgressRecord
  */
 export type ModelEgressRecord = {
@@ -1116,7 +1202,7 @@ export type ModelEgressRecord = {
     /**
      * Purpose
      */
-    purpose: 'intent_candidate' | 'synthesis';
+    purpose: 'semantic_compile' | 'intent_candidate' | 'synthesis';
     /**
      * Started At
      */
@@ -1200,7 +1286,7 @@ export type OperationIr = {
     /**
      * Answer Policy
      */
-    answer_policy?: 'deterministic_table' | 'deterministic_summary' | 'llm_synthesis' | 'llm_general';
+    answer_policy?: 'deterministic_table' | 'deterministic_summary' | 'llm_synthesis' | 'llm_general' | 'llm_hybrid';
     /**
      * Completeness Required
      */
@@ -1230,7 +1316,7 @@ export type OperationIr = {
     /**
      * Operation
      */
-    operation: 'list_entities' | 'describe_entity' | 'list_metrics' | 'list_available_dates' | 'summarize_dataset' | 'query_metric' | 'rank_entities' | 'compare_periods' | 'forecast' | 'alert' | 'transfer' | 'geo' | 'correlation' | 'diagnosis' | 'trend_analysis' | 'report' | 'capability_readiness' | 'travel_plan' | 'capability_help' | 'general_answer';
+    operation: 'list_entities' | 'describe_entity' | 'list_metrics' | 'list_available_dates' | 'summarize_dataset' | 'query_metric' | 'rank_entities' | 'compare_periods' | 'forecast' | 'alert' | 'transfer' | 'geo' | 'correlation' | 'diagnosis' | 'trend_analysis' | 'report' | 'capability_readiness' | 'travel_plan' | 'capability_help' | 'general_answer' | 'external_answer';
     /**
      * Origin
      */
@@ -1436,6 +1522,10 @@ export type RunRecord = {
     created_at?: string;
     dataset_eligibility?: DatasetEligibility;
     /**
+     * Entity Resolutions
+     */
+    entity_resolutions?: Array<EntityResolution>;
+    /**
      * Events
      */
     events?: Array<{
@@ -1454,7 +1544,11 @@ export type RunRecord = {
     /**
      * Intent Route
      */
-    intent_route?: 'deterministic' | 'model_candidate' | 'clarification';
+    intent_route?: 'deterministic' | 'model_candidate' | 'semantic_model' | 'semantic_fallback' | 'clarification';
+    /**
+     * Metric Resolutions
+     */
+    metric_resolutions?: Array<MetricResolution>;
     /**
      * Model Egress
      */
@@ -1502,6 +1596,17 @@ export type RunRecord = {
         [key: string]: unknown;
     };
     /**
+     * Semantic Disagreements
+     */
+    semantic_disagreements?: Array<string>;
+    semantic_frame?: SemanticFrame | null;
+    semantic_memory_snapshot?: SemanticMemory;
+    semantic_shadow_frame?: SemanticFrame | null;
+    /**
+     * Semantic Source
+     */
+    semantic_source?: 'model' | 'deterministic_fallback' | null;
+    /**
      * Session Id
      */
     session_id: string;
@@ -1514,6 +1619,157 @@ export type RunRecord = {
      */
     tool_results?: Array<ToolResult>;
     verification?: VerificationReport | null;
+};
+
+/**
+ * SemanticEntityMention
+ *
+ * A user-language entity mention; database identifiers are deliberately absent.
+ */
+export type SemanticEntityMention = {
+    /**
+     * Raw Text
+     */
+    raw_text: string;
+    /**
+     * Reference
+     */
+    reference?: 'named' | 'collection' | 'deictic';
+    /**
+     * Role
+     */
+    role?: 'subject' | 'origin' | 'destination' | 'context';
+    /**
+     * Type
+     */
+    type: 'line' | 'station' | 'place' | 'event' | 'unknown';
+};
+
+/**
+ * SemanticFrame
+ *
+ * Open-language meaning compiled by GPT; it cannot contain SQL or physical IDs.
+ */
+export type SemanticFrame = {
+    /**
+     * Assumptions
+     */
+    assumptions?: Array<string>;
+    /**
+     * Confidence
+     */
+    confidence: number;
+    /**
+     * Defaults Allowed
+     */
+    defaults_allowed?: boolean;
+    /**
+     * Entity Mentions
+     */
+    entity_mentions?: Array<SemanticEntityMention>;
+    /**
+     * Evidence Requirements
+     */
+    evidence_requirements?: Array<'database_rows' | 'metric_definition' | 'general_knowledge' | 'external_live_data' | 'navigation'>;
+    /**
+     * Goal
+     */
+    goal: string;
+    /**
+     * Inherit Context
+     */
+    inherit_context?: boolean;
+    /**
+     * Material Missing Fields
+     */
+    material_missing_fields?: Array<string>;
+    /**
+     * Metric Mentions
+     */
+    metric_mentions?: Array<SemanticMetricMention>;
+    /**
+     * Operations
+     */
+    operations: Array<'discover' | 'describe' | 'query' | 'aggregate' | 'rank' | 'compare' | 'forecast' | 'diagnose' | 'explain' | 'travel' | 'help' | 'alert' | 'transfer' | 'geo' | 'correlate' | 'trend' | 'report'>;
+    /**
+     * Route
+     */
+    route: 'data' | 'general' | 'hybrid' | 'external' | 'clarify';
+    /**
+     * Schema Version
+     */
+    schema_version?: '1.0';
+    /**
+     * Target Kind
+     */
+    target_kind?: 'line' | 'station' | 'metric' | 'date' | 'dataset' | 'capability' | 'place' | 'event' | 'unspecified';
+    time_expression?: SemanticTimeExpression;
+};
+
+/**
+ * SemanticMemory
+ */
+export type SemanticMemory = {
+    /**
+     * Current Entities
+     */
+    current_entities?: {
+        [key: string]: Array<string>;
+    };
+    /**
+     * Current Metric
+     */
+    current_metric?: string | null;
+    /**
+     * Current Time Range
+     */
+    current_time_range?: {
+        [key: string]: string;
+    };
+    /**
+     * Last Operations
+     */
+    last_operations?: Array<'discover' | 'describe' | 'query' | 'aggregate' | 'rank' | 'compare' | 'forecast' | 'diagnose' | 'explain' | 'travel' | 'help' | 'alert' | 'transfer' | 'geo' | 'correlate' | 'trend' | 'report'>;
+    /**
+     * Last Route
+     */
+    last_route?: 'data' | 'general' | 'hybrid' | 'external' | 'clarify' | null;
+    /**
+     * Updated At
+     */
+    updated_at?: string | null;
+};
+
+/**
+ * SemanticMetricMention
+ */
+export type SemanticMetricMention = {
+    /**
+     * Candidate Metrics
+     */
+    candidate_metrics?: Array<string>;
+    /**
+     * Raw Text
+     */
+    raw_text: string;
+    /**
+     * Resolution
+     */
+    resolution?: 'exact' | 'candidate' | 'unspecified' | 'unresolved';
+};
+
+/**
+ * SemanticTimeExpression
+ */
+export type SemanticTimeExpression = {
+    /**
+     * Raw Text
+     */
+    raw_text?: string | null;
+    /**
+     * Resolution
+     */
+    resolution?: 'explicit' | 'default_allowed' | 'unspecified' | 'unresolved';
 };
 
 /**
@@ -1546,6 +1802,7 @@ export type SessionRecord = {
      * Policy Snapshot Id
      */
     policy_snapshot_id: string;
+    semantic_memory?: SemanticMemory;
     /**
      * Session Id
      */
@@ -1617,7 +1874,7 @@ export type TaskPlan = {
     /**
      * Task Type
      */
-    task_type: 'query' | 'compare' | 'forecast' | 'alert' | 'transfer' | 'geo' | 'correlation' | 'diagnosis' | 'trend' | 'report' | 'travel' | 'help' | 'general';
+    task_type: 'query' | 'compare' | 'forecast' | 'alert' | 'transfer' | 'geo' | 'correlation' | 'diagnosis' | 'trend' | 'report' | 'travel' | 'help' | 'general' | 'external';
 };
 
 /**

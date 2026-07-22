@@ -32,6 +32,7 @@ from metro_agent.assistant.schemas import (
     EvidencePacket,
     HumanFeedbackRequest,
     IntentEnvelope,
+    SemanticFrame,
     StructuredClaim,
     TaskPlan,
     ToolResult,
@@ -82,6 +83,11 @@ class AssistantTests(unittest.TestCase):
             "有哪些指标": ("list_metrics", "metric_catalog"),
             "数据覆盖哪些日期": ("list_available_dates", "date_catalog"),
             "数据库基本情况": ("summarize_dataset", "data_scope_summary"),
+            "给出数据库中北京地铁一号线到情况": (
+                "describe_entity",
+                "entity_description",
+            ),
+            "介绍一下1号线": ("describe_entity", "entity_description"),
         }
         for question, expected in cases.items():
             with self.subTest(question=question):
@@ -102,6 +108,33 @@ class AssistantTests(unittest.TestCase):
                     coverage["returned_count"], run["tool_results"][0]["returned_row_count"]
                 )
         self.assertEqual(provider.synthesis_calls, 0)
+
+    def test_line_situation_normalizes_typos_and_uses_database_evidence(self) -> None:
+        questions = (
+            "给出数据库中北京地铁一号线到情况",
+            "查看数据库里北京地铁1号线的情况",
+            "介绍一下1号线",
+            "说明一号线的进站情况",
+        )
+        for question in questions:
+            with self.subTest(question=question):
+                session_id = self.assistant.create_session()["session_id"]
+                run = self.assistant.message(
+                    session_id,
+                    AssistantMessageRequest(message=question),
+                )
+                self.assertEqual(run["status"], "completed")
+                self.assertEqual(run["intent"]["task_type"], "query")
+                self.assertEqual(run["operation_ir"]["operation"], "describe_entity")
+                self.assertEqual(run["operation_ir"]["entity_type"], "line")
+                self.assertEqual(run["operation_ir"]["target_query"], "L-A")
+                self.assertEqual(run["capability_match"]["capability_id"], "entity_description")
+                self.assertEqual(run["plan"]["steps"][0]["tool"], "describe_observed_entity")
+                self.assertEqual(run["model_runtime"]["model_calls"], 0)
+                self.assertEqual(run["tool_results"][0]["rows"][0]["entries"], 964)
+                self.assertIn("进站量（entries）汇总为 964", run["response"]["answer"])
+                self.assertNotIn("未读取 metroflow", run["response"]["answer"])
+                self.assertTrue(run["verification"]["valid"])
 
     def test_failed_trace_clustering_yields_regression_candidate(self) -> None:
         session_id = self.assistant.create_session()["session_id"]
@@ -191,6 +224,14 @@ class AssistantTests(unittest.TestCase):
                         "total_tokens": 40,
                     }
                 )
+                if schema is SemanticFrame:
+                    return SemanticFrame(
+                        route="general",
+                        goal=context["question"],
+                        operations=["explain"],
+                        evidence_requirements=["general_knowledge"],
+                        confidence=0.96,
+                    )
                 return schema.model_validate(
                     {
                         "answer": "断面客流用于描述列车或线路通过某一断面的客流规模。",
@@ -219,7 +260,8 @@ class AssistantTests(unittest.TestCase):
             session_id, AssistantMessageRequest(message="什么是地铁断面客流？")
         )
         self.assertEqual(general["status"], "completed")
-        self.assertEqual(general["intent_route"], "deterministic")
+        self.assertEqual(general["intent_route"], "semantic_model")
+        self.assertEqual(general["semantic_source"], "model")
         self.assertEqual(general["intent"]["task_type"], "general")
         self.assertEqual(general["operation_ir"]["operation"], "general_answer")
         self.assertEqual(general["operation_ir"]["answer_policy"], "llm_general")
@@ -232,8 +274,8 @@ class AssistantTests(unittest.TestCase):
             ["prepare_general_context"],
         )
         self.assertFalse(general["tool_results"][0]["rows"][0]["database_rows_included"])
-        self.assertEqual(general["model_runtime"]["provider_calls"], 1)
-        self.assertEqual(general["model_runtime"]["model_calls"], 1)
+        self.assertEqual(general["model_runtime"]["provider_calls"], 2)
+        self.assertEqual(general["model_runtime"]["model_calls"], 2)
         self.assertTrue(general["verification"]["valid"])
         self.assertIn("general knowledge", general["verification"]["warnings"][0])
 
@@ -303,9 +345,10 @@ class AssistantTests(unittest.TestCase):
             def __iter__(self):
                 return iter(
                     [
-                        b'data: {"choices":[{"delta":{"content":"hello"}}]}\n',
-                        b'data: {"choices":[{"delta":{"content":" world"}}]}\n',
-                        b"data: [DONE]\n",
+                        b'data: {"type":"response.created"}\n',
+                        b'data: {"type":"response.output_text.delta","delta":"hello"}\n',
+                        b'data: {"type":"response.output_text.delta","delta":" world"}\n',
+                        b'data: {"type":"response.completed"}\n',
                     ]
                 )
 
@@ -313,7 +356,13 @@ class AssistantTests(unittest.TestCase):
         with patch("urllib.request.urlopen", return_value=Response()) as urlopen:
             self.assertEqual("".join(provider.stream_text("prompt", context={})), "hello world")
         request = urlopen.call_args.args[0]
-        self.assertEqual(request.full_url, "https://example.test/v1/chat/completions")
+        self.assertEqual(request.full_url, "https://example.test/v1/responses")
+        request_body = json.loads(request.data)
+        self.assertEqual(request_body["instructions"], "prompt")
+        self.assertEqual(request_body["input"], "{}")
+        self.assertEqual(request_body["reasoning"], {"effort": "medium"})
+        self.assertFalse(request_body["store"])
+        self.assertTrue(request_body["stream"])
 
     def test_hermes_codex_adapter_uses_safe_oauth_bridge_and_validates_json(self) -> None:
         def completed(command, **kwargs):
@@ -429,30 +478,34 @@ class AssistantTests(unittest.TestCase):
             def read(self):
                 return json.dumps(
                     {
-                        "choices": [
+                        "output": [
                             {
-                                "message": {
-                                    "content": json.dumps(
-                                        {
-                                            "task_type": "query",
-                                            "user_goal": "查询进站客流",
-                                            "entities": {},
-                                            "metrics": ["entries"],
-                                            "time_scope": {},
-                                            "ambiguities": [],
-                                            "needs_clarification": False,
-                                            "event_spec": None,
-                                            "transfer_spec": None,
-                                        }
-                                    )
-                                }
+                                "type": "message",
+                                "content": [
+                                    {
+                                        "type": "output_text",
+                                        "text": json.dumps(
+                                            {
+                                                "task_type": "query",
+                                                "user_goal": "查询进站客流",
+                                                "entities": {},
+                                                "metrics": ["entries"],
+                                                "time_scope": {},
+                                                "ambiguities": [],
+                                                "needs_clarification": False,
+                                                "event_spec": None,
+                                                "transfer_spec": None,
+                                            }
+                                        ),
+                                    }
+                                ],
                             }
                         ],
                         "usage": {
-                            "prompt_tokens": 101,
-                            "completion_tokens": 22,
+                            "input_tokens": 101,
+                            "output_tokens": 22,
                             "total_tokens": 123,
-                            "completion_tokens_details": {"reasoning_tokens": 7},
+                            "output_tokens_details": {"reasoning_tokens": 7},
                         },
                     }
                 ).encode()
@@ -462,8 +515,17 @@ class AssistantTests(unittest.TestCase):
             base_url="https://example.test/v1",
             model="test-model",
         )
-        with patch("urllib.request.urlopen", return_value=Response()):
+        with patch("urllib.request.urlopen", return_value=Response()) as urlopen:
             provider.generate_structured("planner", IntentEnvelope, context={})
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, "https://example.test/v1/responses")
+        request_body = json.loads(request.data)
+        self.assertEqual(request_body["reasoning"], {"effort": "medium"})
+        self.assertFalse(request_body["store"])
+        self.assertEqual(request_body["text"]["format"]["type"], "json_schema")
+        self.assertTrue(request_body["text"]["format"]["strict"])
+        self.assertNotIn("messages", request_body)
+        self.assertNotIn("response_format", request_body)
         runtime = _provider_runtime(provider, provider_calls=1)
         self.assertEqual(runtime.provider, "openai-compatible:test-model")
         self.assertEqual(runtime.model, "test-model")
@@ -499,10 +561,15 @@ class AssistantTests(unittest.TestCase):
             def read(self):
                 return json.dumps(
                     {
-                        "choices": [{"message": {"content": "not-json"}}],
+                        "output": [
+                            {
+                                "type": "message",
+                                "content": [{"type": "output_text", "text": "not-json"}],
+                            }
+                        ],
                         "usage": {
-                            "prompt_tokens": 4,
-                            "completion_tokens": 1,
+                            "input_tokens": 4,
+                            "output_tokens": 1,
                             "total_tokens": 5,
                         },
                     }
@@ -636,12 +703,13 @@ class AssistantTests(unittest.TestCase):
             model = "candidate-model"
 
             def generate_structured(self, prompt, schema, *, context):
-                candidate = FakeProvider().generate_structured(prompt, schema, context=context)
-                return candidate.model_copy(
-                    update={
-                        "needs_clarification": True,
-                        "ambiguities": ["需要明确业务问题"],
-                    }
+                self.usage_records = getattr(self, "usage_records", [])
+                return SemanticFrame(
+                    route="clarify",
+                    goal="明确概览对象",
+                    operations=["describe"],
+                    material_missing_fields=["需要明确业务问题"],
+                    confidence=0.72,
                 )
 
             def generate_tool_calls(self, prompt, *, context):
@@ -662,10 +730,10 @@ class AssistantTests(unittest.TestCase):
         run = assistant.message(session, AssistantMessageRequest(message="概览"))
 
         self.assertEqual(run["status"], "needs_clarification")
-        self.assertEqual(run["intent_route"], "model_candidate")
+        self.assertEqual(run["intent_route"], "semantic_model")
         self.assertEqual(len(run["model_egress"]), 1)
         call = run["model_egress"][0]
-        self.assertEqual(call["purpose"], "intent_candidate")
+        self.assertEqual(call["purpose"], "semantic_compile")
         self.assertEqual(call["decision"], "approved")
         self.assertEqual(call["status"], "succeeded")
         self.assertTrue(call["exact_payload_hash"])
@@ -698,14 +766,15 @@ class AssistantTests(unittest.TestCase):
             provider=FailingProvider(),
         )
         session = assistant.create_session()["session_id"]
-        with self.assertRaisesRegex(RuntimeError, "simulated provider failure"):
-            assistant.message(session, AssistantMessageRequest(message="概览"))
+        result = assistant.message(session, AssistantMessageRequest(message="概览"))
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["semantic_source"], "deterministic_fallback")
 
         run_paths = list(assistant.trace_store.runs.glob("run-*.json"))
         self.assertEqual(len(run_paths), 1)
         persisted = json.loads(run_paths[0].read_text(encoding="utf-8"))
-        self.assertEqual(persisted["status"], "failed")
-        self.assertEqual(persisted["model_egress"][0]["purpose"], "intent_candidate")
+        self.assertEqual(persisted["status"], "completed")
+        self.assertEqual(persisted["model_egress"][0]["purpose"], "semantic_compile")
         self.assertEqual(persisted["model_egress"][0]["status"], "failed")
         self.assertIsNotNone(persisted["model_egress"][0]["completed_at"])
 

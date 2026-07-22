@@ -257,7 +257,8 @@
               "deterministic_table",
               "deterministic_summary",
               "llm_synthesis",
-              "llm_general"
+              "llm_general",
+              "llm_hybrid"
             ],
             "title": "Answer Policy",
             "type": "string"
@@ -741,6 +742,138 @@
           }
         },
         "title": "DatasetEligibility",
+        "type": "object"
+      },
+      "EntityCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "registered_catalog",
+              "observed_database_entity"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "line",
+              "station"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "confidence",
+          "source"
+        ],
+        "title": "EntityCandidate",
+        "type": "object"
+      },
+      "EntityResolution": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/EntityCandidate"
+            },
+            "maxItems": 20,
+            "title": "Candidates",
+            "type": "array"
+          },
+          "raw_text": {
+            "title": "Raw Text",
+            "type": "string"
+          },
+          "reference": {
+            "default": "named",
+            "enum": [
+              "named",
+              "collection",
+              "deictic"
+            ],
+            "title": "Reference",
+            "type": "string"
+          },
+          "role": {
+            "default": "subject",
+            "enum": [
+              "subject",
+              "origin",
+              "destination",
+              "context"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "selected_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Id"
+          },
+          "selected_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Name"
+          },
+          "status": {
+            "enum": [
+              "resolved",
+              "ambiguous",
+              "not_found",
+              "not_applicable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "line",
+              "station",
+              "place",
+              "event",
+              "unknown"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "raw_text",
+          "type",
+          "status"
+        ],
+        "title": "EntityResolution",
         "type": "object"
       },
       "EntitySet": {
@@ -1874,7 +2007,8 @@
               "report",
               "travel",
               "help",
-              "general"
+              "general",
+              "external"
             ],
             "title": "Task Type",
             "type": "string"
@@ -2005,6 +2139,50 @@
         "title": "MetricCatalogItem",
         "type": "object"
       },
+      "MetricResolution": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Candidates",
+            "type": "array"
+          },
+          "raw_text": {
+            "title": "Raw Text",
+            "type": "string"
+          },
+          "selected_metric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Metric"
+          },
+          "status": {
+            "enum": [
+              "resolved",
+              "ambiguous",
+              "not_found",
+              "defaulted"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "raw_text",
+          "status"
+        ],
+        "title": "MetricResolution",
+        "type": "object"
+      },
       "ModelEgressRecord": {
         "additionalProperties": false,
         "properties": {
@@ -2071,6 +2249,7 @@
           },
           "purpose": {
             "enum": [
+              "semantic_compile",
               "intent_candidate",
               "synthesis"
             ],
@@ -2264,7 +2443,8 @@
               "deterministic_table",
               "deterministic_summary",
               "llm_synthesis",
-              "llm_general"
+              "llm_general",
+              "llm_hybrid"
             ],
             "title": "Answer Policy",
             "type": "string"
@@ -2354,7 +2534,8 @@
               "capability_readiness",
               "travel_plan",
               "capability_help",
-              "general_answer"
+              "general_answer",
+              "external_answer"
             ],
             "title": "Operation",
             "type": "string"
@@ -2807,6 +2988,13 @@
           "dataset_eligibility": {
             "$ref": "#/components/schemas/DatasetEligibility"
           },
+          "entity_resolutions": {
+            "items": {
+              "$ref": "#/components/schemas/EntityResolution"
+            },
+            "title": "Entity Resolutions",
+            "type": "array"
+          },
           "events": {
             "items": {
               "additionalProperties": true,
@@ -2871,10 +3059,19 @@
             "enum": [
               "deterministic",
               "model_candidate",
+              "semantic_model",
+              "semantic_fallback",
               "clarification"
             ],
             "title": "Intent Route",
             "type": "string"
+          },
+          "metric_resolutions": {
+            "items": {
+              "$ref": "#/components/schemas/MetricResolution"
+            },
+            "title": "Metric Resolutions",
+            "type": "array"
           },
           "model_egress": {
             "items": {
@@ -2958,6 +3155,51 @@
             "title": "Selected Context",
             "type": "object"
           },
+          "semantic_disagreements": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Semantic Disagreements",
+            "type": "array"
+          },
+          "semantic_frame": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SemanticFrame"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "semantic_memory_snapshot": {
+            "$ref": "#/components/schemas/SemanticMemory"
+          },
+          "semantic_shadow_frame": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SemanticFrame"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "semantic_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "model",
+                  "deterministic_fallback"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Source"
+          },
           "session_id": {
             "title": "Session Id",
             "type": "string"
@@ -3004,6 +3246,358 @@
         "title": "RunRecord",
         "type": "object"
       },
+      "SemanticEntityMention": {
+        "additionalProperties": false,
+        "description": "A user-language entity mention; database identifiers are deliberately absent.",
+        "properties": {
+          "raw_text": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Raw Text",
+            "type": "string"
+          },
+          "reference": {
+            "default": "named",
+            "enum": [
+              "named",
+              "collection",
+              "deictic"
+            ],
+            "title": "Reference",
+            "type": "string"
+          },
+          "role": {
+            "default": "subject",
+            "enum": [
+              "subject",
+              "origin",
+              "destination",
+              "context"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "line",
+              "station",
+              "place",
+              "event",
+              "unknown"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "raw_text"
+        ],
+        "title": "SemanticEntityMention",
+        "type": "object"
+      },
+      "SemanticFrame": {
+        "additionalProperties": false,
+        "description": "Open-language meaning compiled by GPT; it cannot contain SQL or physical IDs.",
+        "properties": {
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Assumptions",
+            "type": "array"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "defaults_allowed": {
+            "default": true,
+            "title": "Defaults Allowed",
+            "type": "boolean"
+          },
+          "entity_mentions": {
+            "items": {
+              "$ref": "#/components/schemas/SemanticEntityMention"
+            },
+            "maxItems": 16,
+            "title": "Entity Mentions",
+            "type": "array"
+          },
+          "evidence_requirements": {
+            "items": {
+              "enum": [
+                "database_rows",
+                "metric_definition",
+                "general_knowledge",
+                "external_live_data",
+                "navigation"
+              ],
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Evidence Requirements",
+            "type": "array"
+          },
+          "goal": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Goal",
+            "type": "string"
+          },
+          "inherit_context": {
+            "default": false,
+            "title": "Inherit Context",
+            "type": "boolean"
+          },
+          "material_missing_fields": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Material Missing Fields",
+            "type": "array"
+          },
+          "metric_mentions": {
+            "items": {
+              "$ref": "#/components/schemas/SemanticMetricMention"
+            },
+            "maxItems": 8,
+            "title": "Metric Mentions",
+            "type": "array"
+          },
+          "operations": {
+            "items": {
+              "enum": [
+                "discover",
+                "describe",
+                "query",
+                "aggregate",
+                "rank",
+                "compare",
+                "forecast",
+                "diagnose",
+                "explain",
+                "travel",
+                "help",
+                "alert",
+                "transfer",
+                "geo",
+                "correlate",
+                "trend",
+                "report"
+              ],
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Operations",
+            "type": "array"
+          },
+          "route": {
+            "enum": [
+              "data",
+              "general",
+              "hybrid",
+              "external",
+              "clarify"
+            ],
+            "title": "Route",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "target_kind": {
+            "default": "unspecified",
+            "enum": [
+              "line",
+              "station",
+              "metric",
+              "date",
+              "dataset",
+              "capability",
+              "place",
+              "event",
+              "unspecified"
+            ],
+            "title": "Target Kind",
+            "type": "string"
+          },
+          "time_expression": {
+            "$ref": "#/components/schemas/SemanticTimeExpression"
+          }
+        },
+        "required": [
+          "route",
+          "goal",
+          "operations",
+          "confidence"
+        ],
+        "title": "SemanticFrame",
+        "type": "object"
+      },
+      "SemanticMemory": {
+        "additionalProperties": false,
+        "properties": {
+          "current_entities": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Current Entities",
+            "type": "object"
+          },
+          "current_metric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Metric"
+          },
+          "current_time_range": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Current Time Range",
+            "type": "object"
+          },
+          "last_operations": {
+            "items": {
+              "enum": [
+                "discover",
+                "describe",
+                "query",
+                "aggregate",
+                "rank",
+                "compare",
+                "forecast",
+                "diagnose",
+                "explain",
+                "travel",
+                "help",
+                "alert",
+                "transfer",
+                "geo",
+                "correlate",
+                "trend",
+                "report"
+              ],
+              "type": "string"
+            },
+            "title": "Last Operations",
+            "type": "array"
+          },
+          "last_route": {
+            "anyOf": [
+              {
+                "enum": [
+                  "data",
+                  "general",
+                  "hybrid",
+                  "external",
+                  "clarify"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Route"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "title": "SemanticMemory",
+        "type": "object"
+      },
+      "SemanticMetricMention": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_metrics": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Candidate Metrics",
+            "type": "array"
+          },
+          "raw_text": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Raw Text",
+            "type": "string"
+          },
+          "resolution": {
+            "default": "unspecified",
+            "enum": [
+              "exact",
+              "candidate",
+              "unspecified",
+              "unresolved"
+            ],
+            "title": "Resolution",
+            "type": "string"
+          }
+        },
+        "required": [
+          "raw_text"
+        ],
+        "title": "SemanticMetricMention",
+        "type": "object"
+      },
+      "SemanticTimeExpression": {
+        "additionalProperties": false,
+        "properties": {
+          "raw_text": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Text"
+          },
+          "resolution": {
+            "default": "unspecified",
+            "enum": [
+              "explicit",
+              "default_allowed",
+              "unspecified",
+              "unresolved"
+            ],
+            "title": "Resolution",
+            "type": "string"
+          }
+        },
+        "title": "SemanticTimeExpression",
+        "type": "object"
+      },
       "SessionRecord": {
         "additionalProperties": false,
         "properties": {
@@ -3036,6 +3630,9 @@
           "policy_snapshot_id": {
             "title": "Policy Snapshot Id",
             "type": "string"
+          },
+          "semantic_memory": {
+            "$ref": "#/components/schemas/SemanticMemory"
           },
           "session_id": {
             "title": "Session Id",
@@ -3189,7 +3786,8 @@
               "report",
               "travel",
               "help",
-              "general"
+              "general",
+              "external"
             ],
             "title": "Task Type",
             "type": "string"

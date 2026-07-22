@@ -167,7 +167,9 @@ completeness guarantee depends on server-originated upstream results, not caller
 It retrieves the database password from macOS Keychain, reads connection metadata, CA and leaf
 pin from a private external config directory, performs a bounded read-only preflight, then starts
 FastAPI and the Web dashboard. The browser never receives the API token: Vite adds it only in the
-server-side development proxy.
+server-side production-preview proxy. The built Web assets use the `/real-shadow/` base path and
+the proxy admits only `/health` and `/api` upstream routes; Vite source and filesystem routes are
+not exposed.
 
 Required external files (default directory
 `~/.config/metro-passenger-flow-agent`, mode `0700`) are:
@@ -189,3 +191,13 @@ payload hash, provider/model/target binding, outcome, and token usage. Results a
 production promotion are still unverified. Therefore the website must not present them as a
 current operational view or enable write, notification, export, arbitrary SQL, or automatic
 control actions.
+
+The temporary password-gated Aliyun ingress, one-click operator controls, outage behavior, and
+acceptance checks are documented in [`real_shadow_demo.md`](real_shadow_demo.md). It is an
+explicitly approved tender-demo exception, not a production promotion.
+
+For server-side OpenAI testing, use `METRO_ASSISTANT_PROVIDER=openai` with a runtime-injected
+`OPENAI_API_KEY` and set `METRO_ASSISTANT_REASONING_EFFORT` explicitly. The adapter uses the
+stateless Responses API (`/v1/responses`, `store:false`) and strict `text.format` JSON Schemas.
+Keep `METRO_MODEL_DATA_EGRESS=deny` while validating real database semantics. Test model egress
+separately with synthetic Evidence before approving only aggregated, redacted Evidence Packets.

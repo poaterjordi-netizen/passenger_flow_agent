@@ -16,6 +16,8 @@ _EXPOSED_TOOLS = {
     "resolve_metro_entity",
     "get_data_quality_status",
     "query_metric",
+    "execute_query_ir",
+    "search_entities",
     "compare_metric_periods",
 }
 
@@ -50,9 +52,9 @@ class MetroMcpFacade:
 
     @staticmethod
     def _spec(name: str) -> dict[str, Any]:
-        if name in {"query_metric", "compare_metric_periods"}:
+        if name in {"query_metric", "execute_query_ir", "compare_metric_periods"}:
             schema = QueryRequest.model_json_schema()
-        elif name in {"list_observed_entities", "describe_observed_entity"}:
+        elif name in {"list_observed_entities", "describe_observed_entity", "search_entities"}:
             required = ["entity_type", "query"]
             properties: dict[str, Any] = {
                 "entity_type": {"type": "string", "enum": ["station", "line"]},
@@ -61,6 +63,9 @@ class MetroMcpFacade:
             if name == "describe_observed_entity":
                 required.append("target_query")
                 properties["target_query"] = {"type": "string", "minLength": 1}
+            if name == "search_entities":
+                required.append("raw_text")
+                properties["raw_text"] = {"type": "string", "minLength": 1}
             schema = {
                 "type": "object",
                 "additionalProperties": False,

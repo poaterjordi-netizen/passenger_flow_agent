@@ -17,6 +17,7 @@ from metro_agent.access import AccessContext, AuthorizationService
 from metro_agent.api.models import ForecastRequest, QueryRequest
 from metro_agent.api.service import PassengerFlowDataService
 from metro_agent.assistant.schemas import ActionPlan, ToolResult
+from metro_agent.assistant.text_normalization import entity_match_keys, line_number
 
 ToolHandler = Callable[[dict[str, Any], list[ToolResult]], dict[str, Any]]
 
@@ -51,10 +52,12 @@ class ToolRegistry:
             "list_available_dates": self._available_dates,
             "describe_data_scope": self._data_scope,
             "resolve_metro_entity": self._resolve_entity,
+            "search_entities": self._search_entities,
             "describe_observed_entity": self._describe_entity,
             "get_data_quality_status": self._quality_status,
             "get_audit_summary": self._audit_summary,
             "query_metric": self._query,
+            "execute_query_ir": self._query,
             "list_observed_entities": self._observed_entities,
             "query_ticket_flow": self._ticket_flow,
             "compare_metric_periods": self._compare,
@@ -104,6 +107,7 @@ class ToolRegistry:
             "plan_public_transit_route": self._travel_plan,
             "describe_assistant_capabilities": self._assistant_capabilities,
             "prepare_general_context": self._general_context,
+            "prepare_external_context": self._external_context,
         }
         if data_service.data_scope != "synthetic":
             admitted = {
@@ -114,6 +118,8 @@ class ToolRegistry:
                 "get_data_quality_status",
                 "get_audit_summary",
                 "query_metric",
+                "execute_query_ir",
+                "search_entities",
                 "list_observed_entities",
                 "describe_observed_entity",
                 "compare_metric_periods",
@@ -125,6 +131,7 @@ class ToolRegistry:
                 "plan_public_transit_route",
                 "describe_assistant_capabilities",
                 "prepare_general_context",
+                "prepare_external_context",
             }
             self._tools = {
                 name: handler for name, handler in self._tools.items() if name in admitted
@@ -484,6 +491,7 @@ class ToolRegistry:
             "travel_planning": "出行规划与实时导航",
             "assistant_capability_help": "能力和使用帮助",
             "general_question_answering": "GPT 通用问答",
+            "external_information_boundary": "外部实时信息能力边界",
         }
         rows = [
             {
@@ -557,6 +565,42 @@ class ToolRegistry:
             },
         }
 
+    def _external_context(self, arguments: dict[str, Any], _: list[ToolResult]) -> dict[str, Any]:
+        question = str(arguments.get("question") or "").strip()
+        if not question:
+            raise ValueError("external answer requires a question")
+        rows = [
+            {
+                "answer_mode": "external_live_data_required",
+                "database_rows_included": False,
+                "external_live_data_included": False,
+                "required_tool_classes": ["weather", "events", "live_transit", "web_search"],
+            }
+        ]
+        return {
+            "summary": {
+                "claim": (
+                    "该问题依赖当前外部信息；现有运行时尚未接入对应实时工具，"
+                    "因此没有把模型记忆冒充实时事实。"
+                ),
+                "scope": "external_live_data_capability_boundary",
+            },
+            "rows": rows,
+            "warnings": ["接入并引用实时外部工具后才可给出当前事实结论。"],
+            "complete": True,
+            "truncated": False,
+            "matched_row_count": 1,
+            "coverage": {
+                "coverage_type": "general_context",
+                "scope_label": "external_live_data_capability_boundary",
+                "authoritative_master": False,
+                "returned_count": 1,
+                "matched_count": 1,
+                "complete": True,
+                "truncated": False,
+            },
+        }
+
     def _resolve_entity(self, arguments: dict[str, Any], _: list[ToolResult]) -> dict[str, Any]:
         query = str(arguments.get("query") or "").strip()
         if not query:
@@ -573,6 +617,67 @@ class ToolRegistry:
             "summary": {"claim": f"实体解析返回 {len(candidates)} 个授权候选"},
             "rows": candidates,
             "warnings": warnings,
+        }
+
+    def _search_entities(
+        self, arguments: dict[str, Any], dependencies: list[ToolResult]
+    ) -> dict[str, Any]:
+        raw_text = str(arguments.get("raw_text") or "").strip()
+        entity_type = str(arguments.get("entity_type") or "")
+        if not raw_text:
+            raise ValueError("raw_text is required")
+        if entity_type not in {"line", "station"}:
+            raise ValueError("entity_type must be line or station")
+        inventory = self._observed_entities(arguments, dependencies)
+        target_keys = entity_match_keys(raw_text, entity_type)
+        name_field = f"{entity_type}_name"
+        candidates = []
+        requested_line_number = line_number(raw_text) if entity_type == "line" else None
+        for index, row in enumerate(inventory["rows"], start=1):
+            entity_id = str(row[entity_type])
+            entity_name = str(row.get(name_field) or entity_id)
+            keys = entity_match_keys(entity_id, entity_type) | entity_match_keys(
+                entity_name, entity_type
+            )
+            exact = raw_text.lower() in {entity_id.lower(), entity_name.lower()}
+            overlap = bool(target_keys & keys)
+            synthetic_ordinal = (
+                self.data_service.data_scope == "synthetic"
+                and requested_line_number == index
+                and entity_type == "line"
+            )
+            if exact or overlap or synthetic_ordinal:
+                candidates.append(
+                    {
+                        "id": entity_id,
+                        "name": entity_name,
+                        "type": entity_type,
+                        "confidence": 1.0 if exact else 0.98 if overlap else 0.9,
+                        "source": "observed_database_entity",
+                    }
+                )
+        candidates.sort(key=lambda item: (-item["confidence"], item["id"]))
+        return {
+            "summary": {
+                "claim": f"实体原文“{raw_text}”匹配到 {len(candidates)} 个观测候选",
+                "raw_text": raw_text,
+                "entity_type": entity_type,
+                "candidate_count": len(candidates),
+                "scope": inventory["summary"]["scope"],
+                "provenance": inventory["summary"]["provenance"],
+            },
+            "rows": candidates[:20],
+            "warnings": inventory.get("warnings", []),
+            "complete": True,
+            "truncated": False,
+            "matched_row_count": len(candidates),
+            "calculation_method": "deterministic_observed_entity_linking",
+            "coverage": {
+                **inventory["coverage"],
+                "scope_label": "entity_candidates_in_approved_observation_window",
+                "returned_count": min(len(candidates), 20),
+                "matched_count": len(candidates),
+            },
         }
 
     def _quality_status(self, _: dict[str, Any], __: list[ToolResult]) -> dict[str, Any]:
@@ -738,12 +843,15 @@ class ToolRegistry:
         if not target:
             raise ValueError("target_query is required")
         name_field = f"{entity_type}_name"
-        matches = [
-            row
-            for row in inventory["rows"]
-            if target in str(row.get(entity_type, "")).lower()
-            or target in str(row.get(name_field, "")).lower()
-        ]
+        target_keys = entity_match_keys(target, entity_type)
+        matches = []
+        for row in inventory["rows"]:
+            candidate_keys = entity_match_keys(str(row.get(entity_type, "")), entity_type)
+            candidate_keys.update(
+                entity_match_keys(str(row.get(name_field, "")), entity_type)
+            )
+            if target_keys & candidate_keys:
+                matches.append(row)
         if not matches:
             raise ValueError("requested entity was not observed in the approved data window")
         label = "站点" if entity_type == "station" else "线路"
@@ -755,6 +863,31 @@ class ToolRegistry:
             )
             for row in matches
         ]
+        request = QueryRequest.model_validate(arguments.get("query"))
+        profile_result = self.data_service.query(request, _ACCESS_CONTEXT.get())
+        profile_provenance = profile_result.get("provenance", {})
+        if profile_provenance.get("truncated") or not profile_provenance.get("complete", True):
+            raise ValueError("entity profile is incomplete; narrow scope or raise the row limit")
+        matched_ids = {str(row[entity_type]) for row in matches}
+        metric = str(profile_result["metric"])
+        metric_label = {
+            "entries": "进站量",
+            "exits": "出站量",
+            "transfers": "换乘量",
+            "net_inflow": "净流入",
+        }.get(metric, metric)
+        metric_rows = [
+            row
+            for row in profile_result.get("rows", [])
+            if str(row.get(entity_type, "")) in matched_ids
+        ]
+        if len(metric_rows) != len(matches):
+            raise ValueError("entity profile does not match the resolved entity set")
+        metric_total = sum(float(row[metric]) for row in metric_rows)
+        result_rows = []
+        values_by_id = {str(row[entity_type]): row[metric] for row in metric_rows}
+        for row in matches:
+            result_rows.append({**row, metric: values_by_id[str(row[entity_type])]})
         coverage = dict(inventory["coverage"])
         coverage.update(
             {
@@ -766,17 +899,24 @@ class ToolRegistry:
         return {
             "summary": {
                 "claim": f"在当前准入实际客流时间窗中匹配到 {len(matches)} 个{label}："
-                + "、".join(rendered),
+                + "、".join(rendered)
+                + f"；按本次查询指标 {metric_label}（{metric}）汇总为 {metric_total:g}",
                 "entity_type": entity_type,
                 "target_query": target,
+                "metric": metric,
+                "metric_total": metric_total,
+                "profile_rows": metric_rows,
                 "scope": inventory["summary"]["scope"],
                 "authoritative_master": False,
                 "scope_warning": inventory["summary"]["scope_warning"],
                 "query_ir": inventory["summary"]["query_ir"],
                 "provenance": inventory["summary"]["provenance"],
             },
-            "rows": matches,
-            "warnings": inventory["warnings"],
+            "rows": result_rows,
+            "warnings": [
+                *inventory["warnings"],
+                "用户未明确指标或日期时，实体概况采用当前准入时间窗和默认进站量（entries）指标；可继续指定指标与时间细化查询。",
+            ],
             "complete": True,
             "truncated": False,
             "matched_row_count": len(matches),

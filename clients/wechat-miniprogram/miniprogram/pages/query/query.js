@@ -115,7 +115,9 @@ Page({
     }
     const dimensions = this.data.allowedDimensions.filter((item) => item.checked).map((item) => item.id)
     const payload = {
+      city: this.data.catalog.city || undefined,
       metric: metric.id,
+      source_version: this.data.catalog.source_version || undefined,
       time_range: {
         start: `${this.data.startDate}T${this.data.startTime}:00+08:00`,
         end: `${this.data.endDate}T${this.data.endTime}:00+08:00`

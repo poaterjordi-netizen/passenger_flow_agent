@@ -97,6 +97,9 @@ def _run_case(
             "status": run.get("status"),
             "actual_task_type": (run.get("intent") or {}).get("task_type"),
             "tools": [item["tool"] for item in run.get("tool_results", [])],
+            "semantic_frame": run.get("semantic_frame"),
+            "semantic_shadow_frame": run.get("semantic_shadow_frame"),
+            "semantic_disagreements": run.get("semantic_disagreements", []),
             "verification_errors": (run.get("verification") or {}).get("errors", []),
             "error_code": None,
         }
@@ -107,6 +110,9 @@ def _run_case(
             "status": "failed",
             "actual_task_type": None,
             "tools": [],
+            "semantic_frame": None,
+            "semantic_shadow_frame": None,
+            "semantic_disagreements": [],
             "verification_errors": [],
             "error_code": type(exc).__name__,
         }

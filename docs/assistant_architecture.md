@@ -1,38 +1,40 @@
 # 受治理客流智能体工作流
 
-本智能体采用固定外层状态机和可替换模型边界。它不是让模型自由调用数据库或任意函数，而是让模型在确定性基线、工具白名单、证据和核验器保护下完成语言理解与表达。
+本智能体采用 GPT 优先的通用语义编译层和固定执行状态机。无限自然语言由模型理解；有限业务语义、实体 ID、指标、QueryIR、数据库执行、证据与核验由后端确定。模型不会生成 SQL 或直接访问数据库。
 
 ## 运行闭环
 
 ```text
-RECEIVE → UNDERSTAND → COMPILE_OPERATION → CLARIFY → PLAN → EXECUTE_TOOLS
-        → OBSERVE → REPLAN → SYNTHESIZE → VERIFY → RESPOND
+RECEIVE → SEMANTIC_FRAME → LINK_SEMANTICS → COMPILE_OPERATION → CLARIFY
+        → PLAN → EXECUTE_TOOLS → OBSERVE → REPLAN → SYNTHESIZE → VERIFY → RESPOND
 ```
 
-模型调用由确定性 route selection 决定，而不是固定三次调用：
+每个自由问题优先调用一次 GPT-5.6 Sol 产生严格 `SemanticFrame`。清单、实体概况和目录查询通常只需这一次理解调用；复杂分析、一般知识和混合问题再调用一次证据合成；数据库工具本身不调用模型。
 
-“列出所有站点/线路”使用 `list_observed_entities`：它从已准入事实时间窗执行完整去重查询并由确定性 renderer 直接回答；若发生截断则拒绝宣称完整，并明确它不是跨表主数据扫描。此路径不调用 GPT。
+“列出所有站点/线路”在语义编译后使用 `list_observed_entities`，由确定性 renderer 直接回答；若发生截断则拒绝宣称完整，并明确它不是跨表主数据扫描。此路径只有语义编译一次模型调用，不做第二次文案合成。
 
-1. 确定性解析器高置信命中时直接产生 `IntentEnvelope`；
-2. 解析器仅产生有限候选或 abstain，且模型端点策略允许时，模型才提出 Intent 候选；
-3. 城市、数据角色、来源版本、指标版本和粒度由服务端锁定，候选还必须通过 catalog、实体、时间和 AccessContext 硬校验；
-4. 已验证 Intent 编译成稳定的 `OperationIR`，再匹配 `config/assistant_capabilities.json` 中版本化能力；
+1. 模型只输出 `data/general/hybrid/external/clarify` 路线、业务动作、目标类型、实体原文、指标候选、时间表达和证据需求；
+2. `SemanticFrame` 的严格 Schema 不含 `resolved_id`、SQL、物理表字段或查询结果；实体原文还必须来自当前问题，承接上文时必须显式声明 `inherit_context`；
+3. 后端从登记目录或当前准入数据时间窗确定性链接实体和指标。唯一高置信候选自动采用，并列候选才追问，没有候选则明确“数据库未观测到”；
+4. 城市、数据角色、来源版本、指标版本、时间范围和粒度由服务端锁定，再编译为稳定 `IntentEnvelope` / `OperationIR` 并匹配版本化能力；
 5. `TaskPlan` 始终由确定性 planner 生成，且使用的工具必须属于所匹配能力；
 6. 工具结果必须附带 `CoverageEvidence`，明确观测时间窗、目录范围、是否权威主数据、返回/匹配数、完整性和截断状态；
-7. 能力的 `answer_policy` 决定回答层：目录、日期、实体清单和数据概况使用零模型 renderer，复杂分析才允许 Evidence synthesis；
+7. 能力的 `answer_policy` 决定回答层：目录、日期、实体清单和数据概况使用确定性 renderer；复杂分析使用 Evidence synthesis；`hybrid` 使用区分“数据库证据/一般知识”的专用合成；
 8. 只有数据出域策略批准时，真实 Provider 才接收 `EvidencePacket`。否则使用确定性 renderer。
 
 ## OperationIR 与能力发现
 
-`OperationIR` 是问法和工具之间的稳定层。目前覆盖 `list_entities`、`describe_entity`、`list_metrics`、`list_available_dates`、`summarize_dataset`、`query_metric`、`rank_entities`、`compare_periods`、`travel_plan`、`capability_help`、`general_answer`、预测、预警、换乘、GIS、相关、诊断、趋势、报告和能力准入检查。诸如“有哪些车站”“车站清单”“把数据库里的地铁站给我”会编译成同一个操作，不再为每种措辞添加后端特判。
+`SemanticFrame` 是问法和业务语义之间的开放层，`OperationIR` 是业务语义和工具之间的稳定层。目前还包含 `external_answer`。诸如“说说一号线”“数据库里 1 号线啥情况”“把一号线画像讲明白”由模型编译成相同业务动作，而不是继续添加说法规则。
 
 能力注册表声明每个 Operation 的可用数据范围、实体类型、必需槽位、工具集合、完整性策略和回答策略。运行时 `/api/v1/assistant/capabilities` 返回注册表版本以及经过当前数据范围物理裁剪后的可用/不可用工具；Web 页面直接显示这些信息。
 
-`travel_plan` 把校园、场馆等外部地点与客流数据库实体分开处理。规则解析支持“从 A 到 B 怎么走”“出行规划”以及常见错字“出现规划”，仅起点和终点是必需槽位，不会追问客流指标或数据库日期。已登记地点对由 `config/travel_routes.json` 提供带来源的静态建议，同时始终生成实时地图入口；未登记地点对直接交给实时地图解析，不编造静态线路。此路径使用 `external_navigation` 覆盖证据和确定性回答，不调用 GPT。
+`travel_plan` 把校园、场馆等外部地点与客流数据库实体分开处理。语义模型标记起点和终点角色，后端只在确实缺少其中一个时追问。已登记地点对由 `config/travel_routes.json` 提供带来源的静态建议，同时始终生成实时地图入口；未登记地点对直接交给实时地图解析，不编造静态线路。
 
-开放问题采用两级泛化兜底，而不是继续扩大互斥业务枚举：`capability_help` 从当前能力注册表生成“能做什么”清单，零模型调用；`general_answer` 为有明确语义但不需要客流工具的问题准备不含业务数据行的边界上下文，然后调用 GPT 一次。通用回答可以使用稳定的一般知识，但必须明确未读取 metroflow 数据库；涉及新闻、价格、法规、运营状态等实时事实而当前又没有外部工具时，回答必须指出所需数据源，不能把模型记忆冒充实时查询。只有问题本身缺少分析对象、目标或执行所需槽位时才进入澄清。
+系统显式支持五条路线：`data` 读取数据库，`general` 使用稳定一般知识，`hybrid` 合并数据库证据与一般解释，`external` 要求天气、活动、实时运营或导航工具，`clarify` 只处理真正改变结果的缺失字段。未接入外部实时工具时，`external_answer` 返回机器可见的能力边界，不把模型记忆冒充当前事实。
 
-路由优先级为：高置信确定性业务 Operation → 能力帮助或通用回答 → 低置信模型候选。已存在的客流查询、排行、对比和预测不会被通用兜底截获；“比较北京和上海旅游”“预测明天天气”等非客流问题不会再误调用客流工具。通用路径仍生成 ToolResult、CoverageEvidence、EvidencePacket、模型出域记录和 verifier 结果，因此不是绕过治理的自由聊天接口。
+真实 Provider 配置并获策略批准时，模型语义是主路由；旧确定性解析器每次仍生成影子 `SemanticFrame` 用于差异审计，只在模型不可用、输出不满足 Schema、捏造问题中不存在的实体原文或端点策略拒绝时接管。降级会写入 `semantic_source`、`semantic_shadow_frame`、`semantic_disagreements` 和 `SEMANTIC_FALLBACK` 事件。
+
+保守中文归一化仍用于模型输出后的实体链接和离线降级，例如统一全角数字、中文线路序号和少量无歧义错字；它不再承担真实模型主路由。用户未指定指标或日期且 `defaults_allowed=true` 时，后端采用当前准入时间窗和登记的默认进站量，无需无意义追问。
 
 发现型工具包括：
 
@@ -45,11 +47,11 @@ RECEIVE → UNDERSTAND → COMPILE_OPERATION → CLARIFY → PLAN → EXECUTE_TO
 
 工具失败时的一次重试也由确定性 planner 产生。重试计划保留原图的完整下游闭包并重映射依赖，因此失败根节点成功后下游计算也会真正重跑；最终 Evidence 只使用本次重试图的成功结果。默认 `FakeProvider` 不产生真实模型调用。
 
-每次真实 Provider 调用都有独立 `ModelEgressRecord`：调用目的、批准/拒绝决定、provider/model/target hash 精确绑定、出域最小包字段路径、精确包 hash、开始/完成时间和成败状态。记录在调用前先落轨迹，失败也会收口为 `failed`。Intent 和 Evidence 使用分离策略；Intent 包不含完整业务字典/权限/工具目录，Synthesis 包只含问题、数据范围与已核验 Evidence。
+每次真实 Provider 调用都有独立 `ModelEgressRecord`，调用目的为 `semantic_compile` 或 `synthesis`。语义包只含当前问题、有限目录契约、语义能力卡、最近用户问题和不含事实行的 `SemanticMemory`；Synthesis 包只含问题、数据范围与已核验 Evidence。
 
 ## 确定性基线与模型净增益
 
-系统不再要求模型 Intent/Plan 与 `FakeProvider` 整份完全相等。确定性高置信路由直接执行；模型仅在 abstain 路由提出语义候选，并接受不可绕过的字段锁定和权限校验。规划保持确定性，因此模型的可测净增益集中在困难意图/实体消歧和证据表达，而不会扩张查询范围。扩大模型路由前，仍必须用真实业务 Gold Cases、hard negatives 和基线对照证明净增益。
+系统不要求模型语义与 `FakeProvider` 影子结果完全相等，但记录 route、operations、实体类型和关键缺失字段差异。模型语义通过 Schema 后成为主路由；规划仍保持确定性，因此模型可以泛化无限表达，却不能扩张查询范围。
 
 ## Provider 模式
 
@@ -73,18 +75,22 @@ metro-agent-api
 
 该适配器使用隔离的一次性 `hermes --safe-mode` 调用，由 Hermes 自己解析既有 OAuth；本项目不读取或复制凭证。它用于本机 shadow 验证，不是生产部署路线，也不提供逐 token SSE。
 
-### OpenAI-compatible 适配器
+### OpenAI Responses API 适配器
 
 ```bash
 export METRO_ASSISTANT_PROVIDER=openai
 export METRO_ASSISTANT_MODEL=gpt-5.6-sol
+export METRO_ASSISTANT_REASONING_EFFORT=medium
 export OPENAI_API_KEY='由密钥管理器在运行时注入'
 # 仅兼容网关需要：
 export OPENAI_BASE_URL='https://gateway.example/v1'
 metro-agent-api
 ```
 
-生产使用仍需另行完成内网端点、密钥管理、超时、限流、审计和业务验收。
+该适配器只调用 `/v1/responses`，把系统约束放入 `instructions`、业务上下文放入
+`input`，严格结构化输出放入 `text.format`；每次显式发送 `reasoning.effort`，并以
+`store:false` 保持无状态。生产使用仍需另行完成密钥管理、费用限额、超时、限流、
+审计和业务验收。
 
 统一接口：
 
@@ -95,8 +101,9 @@ metro-agent-api
 
 ## 稳定模块
 
-- `assistant/schemas.py`：意图、计划、工具、证据、回答、运行时、会话和反馈契约。
-- `assistant/operation_ir.py`：把不同自然语言问法编译成稳定操作。
+- `assistant/schemas.py`：SemanticFrame、意图、计划、工具、证据、回答、运行时、会话和反馈契约。
+- `assistant/semantic.py`：模型语义校验、影子对比、实体/指标链接、Intent 转换和语义记忆。
+- `assistant/operation_ir.py`：把有限语义动作编译成稳定操作。
 - `assistant/capabilities.py`：加载并校验版本化能力注册表。
 - `assistant/context_builder.py`：有界指标目录、业务字典、近期历史和工具上下文。
 - `assistant/orchestrator.py`：状态机、澄清门、依赖调度、并行、失败继续与一次重规划。
@@ -134,8 +141,7 @@ metro-agent-api
 - `GET  /api/v1/assistant/runs/{run_id}/events`
 - `POST /api/v1/assistant/runs/{run_id}/feedback`
 
-Web“智能分析”页面展示多轮对话、核验回答、任务类型、Provider、模型实际调用信息、工具时间线、状态机、证据卡、结果表、图表、限制和人工确认建议；出行规划结果额外展示可点击的实时导航与核验来源。
-页面同时展示 Operation、能力、回答策略、失败类别和 CoverageEvidence；完整发现型结果不会被前端 20 行预览截断。
+Web“智能分析”页面展示 SemanticFrame 路线/目标/动作/置信度、实体原文到数据库 ID 的链接、指标解析、语义记忆快照、旧路由影子差异、模型调用、Operation、能力、工具、证据与核验。`hybrid` 回答在页面明确提示数据库事实和一般推断的边界。
 
 ## 评测
 
@@ -145,11 +151,14 @@ python scripts/evaluate_assistant.py --output /tmp/assistant-eval.json
 python scripts/evaluate_gpt56_shadow.py \
   --case-id assistant-001 --case-id assistant-021 --case-id assistant-081 \
   --output /tmp/gpt56-shadow.json
+python scripts/evaluate_semantic_expressions.py \
+  --case-id semantic-001 --case-id semantic-006 --case-id semantic-008 \
+  --output /tmp/semantic-expression-eval.json
 python scripts/summarize_assistant_failures.py /path/to/assistant/traces \
   --output /tmp/assistant-failure-clusters.json
 ```
 
-100 条用例检查任务类型、工具集合、参数、状态机、工具状态、证据类型、artifact、非因果限制和人工确认边界。通过表示结构化本地轨迹满足已有断言，不等于生产准确率。
+原有 100 条用例检查任务类型、工具集合、参数、状态机、证据和人工确认边界。新增 20 条开放表达集覆盖同义改写、错字、口语、多轮、混合问题、不存在实体、非地铁问题与实时问题，并报告路线准确率、实体提及召回、不必要追问、错误通用兜底和平均模型调用次数。二者均不等于生产准确率。
 
 只有工具成功、证据完整、核验通过，并进一步通过 Gold Case 或获得真实人工采纳的轨迹，才可能进入未来数据集候选。系统不伪造人工标签。
 
@@ -169,14 +178,14 @@ python scripts/summarize_assistant_failures.py /path/to/assistant/traces \
 ## 数据服务、Prompt、记忆与 MCP 边界
 
 - `PassengerFlowDataService` 只是组合 `SemanticCatalog`、`QueryExecutor`、`ForecastExecutor`、`AuditRepository` 与 `QualityService` 的薄 façade；授权和证据构造保持独立。
-- `ContextBuilder` 只注入有界目录、质量状态、查询默认值和最近会话，不注入物理表清单或凭据。
+- `ContextBuilder` 只注入有界目录、质量状态和查询默认值，不注入物理表清单或凭据；语义模型只收到最近用户问题和语义记忆，不收到上一轮数据库答案正文。
 - Prompt 只管理策略和结构化输出契约，并在运行轨迹记录版本与哈希。
 - 本地 `TraceStore` 已执行 subject/tenant/访问范围对象级隔离；生产存储仍需接入正式身份、加密和保留策略。
-- 客流事实不进入长期记忆，始终由受控工具按需查询并封装为 EvidencePacket。
+- 客流事实不进入长期记忆；`SemanticMemory` 只保存当前线路/车站 ID、指标、时间范围、上次动作和路线，事实始终由受控工具按需查询并封装为 EvidencePacket。
 - `EvidencePacket` 在合成前重新计算工具结果 hash，并核验 source lineage、policy snapshot、access scope、完整性和无环依赖；缺 Evidence 或不完整 Evidence 是硬失败，不是 warning。
 - `MetroMcpFacade` 仅是 ToolRegistry 的薄协议边界，不提供 SQL、任意表、写操作或通知动作。需要完整上游证据的排名/增长工具不直接暴露给 MCP，避免外部客户端伪造 rows。
 - `production-shadow` 必须通过版本化逻辑 registry 与仓库外物理 mapping 双层登记，并记录两者版本/哈希；动态 `current/latest` 来源别名被拒绝。
 - production Planner 在计划阶段与实际注册工具取交集：大型活动请求使用真实 actual 上下文和 `assess_event_forecast_readiness`，未准入的其他任务转为 `assess_task_readiness`，不再以 422 掩盖能力缺口，也不调用合成预测、SOP、公交或 GIS 工具。
-- 生产实体解析在权威实体 registry 未接入前不会注册，不用合成实体映射冒充生产能力。
+- 生产实体解析从当前准入实际客流时间窗读取真实 ID/名称候选并标记为 `observed_database_entity`；它不冒充跨表权威主数据，未来仍可替换为正式实体 registry。
 - 生产 Assistant 默认关闭；`METRO_PRODUCTION_ASSISTANT_ENABLED=true` 只是提出启用请求，运行时还会机器检查 promotion gate，二者必须同时通过。真实 Intent/Evidence 默认不出域；即使策略允许，provider、model 和 endpoint target hash 任一不精确匹配也 fail closed。
 - `config/production_promotion_gates.json` 的 owner、数值阈值、artifact 状态与 approval ref 会被后端实际读取；任一不完整即 fail closed。`GET /api/v1/governance/status` 向已授权前端返回安全摘要，Web 据此控制会话、查询和预测按钮。

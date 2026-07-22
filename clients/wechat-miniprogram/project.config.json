@@ -1,7 +1,7 @@
 {
   "appid": "wxcec9562590faa1a0",
   "compileType": "miniprogram",
-  "description": "Governed metro passenger-flow synthetic-data client",
+  "description": "Governed metro passenger-flow client with GPT-first intelligent analysis",
   "libVersion": "3.15.3",
   "cloudfunctionRoot": "cloudfunctions/",
   "miniprogramRoot": "miniprogram/",

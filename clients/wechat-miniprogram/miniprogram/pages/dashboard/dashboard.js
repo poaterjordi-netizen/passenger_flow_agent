@@ -7,6 +7,7 @@ Page({
     error: "",
     loading: true,
     rangeText: "",
+    scopeLabel: "正在识别数据环境",
     topStations: []
   },
 
@@ -38,7 +39,9 @@ Page({
             path: "/api/v1/queries",
             method: "POST",
             data: {
+              city: catalog.city || undefined,
               metric: metric.id,
+              source_version: catalog.source_version || undefined,
               time_range: timeRange,
               dimensions: [],
               filters: [],
@@ -55,7 +58,9 @@ Page({
           path: "/api/v1/queries",
           method: "POST",
           data: {
+            city: catalog.city || undefined,
             metric: "entries",
+            source_version: catalog.source_version || undefined,
             time_range: timeRange,
             dimensions: ["station"],
             filters: [],
@@ -79,6 +84,9 @@ Page({
           cards,
           loading: false,
           rangeText: `${range.start.slice(0, 16).replace("T", " ")} — ${range.end.slice(11, 16)}`,
+          scopeLabel: catalog.data_scope === "production-shadow"
+            ? "真实数据库影子环境"
+            : (catalog.data_scope === "production-readonly" ? "真实数据库只读环境" : "合成数据体验环境"),
           topStations
         })
       })
@@ -93,6 +101,10 @@ Page({
 
   openForecast() {
     wx.switchTab({ url: "/pages/forecast/forecast" })
+  },
+
+  openAssistant() {
+    wx.switchTab({ url: "/pages/assistant/assistant" })
   },
 
   openSettings() {

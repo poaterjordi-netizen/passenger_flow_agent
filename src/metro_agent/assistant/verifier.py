@@ -117,9 +117,9 @@ def verify_candidate_intent(
         raise ValueError("intent source version does not match the selected catalog")
     available_lines = set(catalog.get("lines", []))
     available_stations = set(catalog.get("stations", []))
-    if set(intent.entities.lines) - available_lines:
+    if available_lines and set(intent.entities.lines) - available_lines:
         raise ValueError("intent contains an entity outside the catalog")
-    if set(intent.entities.stations) - available_stations:
+    if available_stations and set(intent.entities.stations) - available_stations:
         raise ValueError("intent contains an entity outside the catalog")
     resolved = intent.time_scope.get("resolved_range")
     if resolved:

@@ -1,0 +1,132 @@
+.assistant-shell { padding-bottom: 64rpx; }
+.assistant-hero { background: linear-gradient(138deg, #103c3b 0%, #155a57 55%, #344a7a 100%); }
+
+.error-actions,
+.composer-heading,
+.runtime-heading,
+.result-heading,
+.verification-heading,
+.tool-line,
+.evidence-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.error-actions { margin-top: 16rpx; }
+.runtime-card, .composer-card { margin-top: 22rpx; }
+.architecture-card { margin-top: 18rpx; }
+.runtime-title, .card-title { color: #173735; font-size: 27rpx; font-weight: 800; }
+.runtime-note { color: #748683; font-size: 21rpx; margin-top: 6rpx; }
+.runtime-state { background: #eef2f1; border-radius: 999rpx; color: #6f817e; font-size: 20rpx; padding: 9rpx 15rpx; }
+.runtime-active { background: #dff3eb; color: #17664b; }
+.runtime-meta { color: #6d807d; display: flex; font-size: 20rpx; gap: 24rpx; margin-top: 18rpx; }
+.architecture-scroll { margin-top: 16rpx; width: 100%; }
+.architecture-row { display: flex; gap: 14rpx; padding-bottom: 5rpx; width: max-content; }
+.architecture-stage { background: #f3f7f6; border: 1rpx solid #e1e9e7; border-radius: 18rpx; box-sizing: border-box; padding: 17rpx; width: 270rpx; }
+.stage-top { color: #788a87; display: flex; font-size: 18rpx; justify-content: space-between; }
+.stage-title { font-size: 22rpx; font-weight: 800; margin-top: 12rpx; }
+.stage-detail { color: #70827f; font-size: 18rpx; line-height: 1.5; margin-top: 7rpx; }
+.production-gaps { background: #fff6e8; border-radius: 16rpx; color: #80602d; font-size: 19rpx; line-height: 1.55; margin-top: 16rpx; padding: 16rpx; }
+.session-action, .copy-run { color: #0f6b63; font-size: 22rpx; font-weight: 750; }
+
+.question-input {
+  background: #f6f9f8;
+  border: 1rpx solid #dde8e5;
+  border-radius: 20rpx;
+  box-sizing: border-box;
+  font-size: 27rpx;
+  line-height: 1.65;
+  margin-top: 20rpx;
+  min-height: 168rpx;
+  padding: 22rpx;
+  width: 100%;
+}
+
+.input-count { color: #91a09e; font-size: 19rpx; margin-top: 8rpx; text-align: right; }
+.example-scroll { margin-top: 18rpx; width: 100%; }
+.example-row { display: flex; gap: 12rpx; padding-bottom: 6rpx; width: max-content; }
+.example-chip, .followup-chip { background: #e9f3f1; border: 1rpx solid #cfe2de; border-radius: 999rpx; color: #285e58; font-size: 21rpx; padding: 13rpx 20rpx; white-space: nowrap; }
+.submit-button { margin-top: 22rpx; }
+.session-id, .run-id { color: #899996; font-size: 18rpx; margin-top: 16rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.history-section { margin-top: 28rpx; }
+.history-list { margin-top: 14rpx; }
+.history-item { border-left: 5rpx solid #b5d5cf; margin-top: 14rpx; padding: 4rpx 0 4rpx 18rpx; }
+.history-question { font-size: 24rpx; font-weight: 700; }
+.history-answer { color: #7b8c89; font-size: 20rpx; line-height: 1.5; margin-top: 5rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.result-section { margin-top: 36rpx; }
+.badge-row { display: flex; flex-wrap: wrap; gap: 10rpx; margin-top: 16rpx; }
+.status-pill { background: #eef2f1; border: 1rpx solid #dce5e3; border-radius: 999rpx; color: #526c68; font-size: 19rpx; padding: 8rpx 13rpx; }
+.pill-ok { background: #e3f4ec; border-color: #c1e5d5; color: #1c7354; }
+.pill-warn { background: #fff1dc; border-color: #efd5aa; color: #926026; }
+
+.semantic-card { border-color: #bcded8; margin-top: 20rpx; }
+.semantic-grid { display: grid; gap: 12rpx; grid-template-columns: repeat(2, 1fr); margin-top: 18rpx; }
+.mini-stat { background: #f3f8f7; border-radius: 16rpx; padding: 16rpx; }
+.mini-stat view, .detail-label { color: #7b8e8a; font-size: 19rpx; }
+.mini-stat text { color: #1d514c; display: block; font-size: 23rpx; font-weight: 750; margin-top: 7rpx; word-break: break-all; }
+.semantic-goal, .memory-box, .shadow-box { background: #f6f9f8; border-radius: 18rpx; font-size: 23rpx; line-height: 1.6; margin-top: 16rpx; padding: 18rpx; }
+.semantic-goal .detail-label { margin-bottom: 7rpx; }
+.detail-group { border-top: 1rpx solid #e7eeec; margin-top: 20rpx; padding-top: 18rpx; }
+.detail-title { color: #375b57; font-size: 22rpx; font-weight: 750; }
+.detail-empty { font-size: 21rpx; margin-top: 12rpx; }
+.resolution-row { margin-top: 13rpx; }
+.resolution-badge { background: #fff0dc; border-radius: 999rpx; color: #936123; display: inline-block; font-size: 18rpx; padding: 7rpx 12rpx; }
+.resolution-ok { background: #e1f2ea; color: #1e7253; }
+.resolution-text { font-size: 21rpx; line-height: 1.55; margin-top: 8rpx; word-break: break-all; }
+.memory-line { color: #5d7470; font-size: 18rpx; line-height: 1.6; margin-top: 6rpx; word-break: break-all; }
+.shadow-box { color: #657a77; }
+
+.verification-card, .answer-card {
+  border: 1rpx solid #d8e4e1;
+  border-radius: 24rpx;
+  margin-top: 20rpx;
+  padding: 24rpx;
+}
+.verification-ok { background: #eaf6f1; border-color: #bfe2d4; }
+.verification-warn, .answer-unverified { background: #fff1ef; border-color: #f0c9c2; }
+.verification-title { color: #285f52; font-size: 24rpx; font-weight: 800; }
+.evidence-count { color: #6f8580; font-size: 19rpx; }
+.warning-line, .error-line { color: #97631e; font-size: 20rpx; line-height: 1.5; margin-top: 8rpx; }
+.error-line { color: #a33d35; }
+.answer-card { background: #eff8f7; border-color: #bee1dc; }
+.answer-label { color: #0f6b63; font-size: 21rpx; font-weight: 800; letter-spacing: 1rpx; }
+.policy-notice { background: #e7f0ff; border-radius: 14rpx; color: #405d8d; font-size: 20rpx; line-height: 1.55; margin-top: 14rpx; padding: 14rpx; }
+.answer-text { font-size: 27rpx; line-height: 1.75; margin-top: 15rpx; white-space: pre-wrap; }
+.answer-list { border-top: 1rpx solid rgba(45, 91, 85, 0.12); color: #526d69; font-size: 21rpx; line-height: 1.6; margin-top: 17rpx; padding-top: 14rpx; }
+.answer-list-title { color: #315d57; font-weight: 800; margin-bottom: 5rpx; }
+.limits { color: #91611f; }
+.recommendations { color: #765421; }
+.hidden-warning { color: #a33d35; font-size: 21rpx; margin-top: 14rpx; }
+
+.external-card, .table-card, .model-card, .trace-card { margin-top: 20rpx; }
+.external-link { background: #e7f3f1; border-radius: 16rpx; color: #0f6b63; font-size: 21rpx; margin-top: 13rpx; padding: 16rpx; }
+.table-notice { color: #97631e; font-size: 20rpx; margin-top: 12rpx; }
+.table-scroll { margin-top: 16rpx; width: 100%; }
+.assistant-table { border: 1rpx solid #dfe8e6; border-radius: 16rpx; min-width: 620rpx; overflow: hidden; }
+.assistant-table-row { border-bottom: 1rpx solid #e8efed; display: flex; }
+.assistant-table-row:last-child { border-bottom: 0; }
+.assistant-table-header { background: #e8f2f0; color: #315c57; font-weight: 800; }
+.assistant-table-cell { box-sizing: border-box; flex: 1; font-size: 20rpx; min-width: 150rpx; padding: 15rpx 12rpx; word-break: break-all; }
+
+.model-grid { display: grid; gap: 16rpx; grid-template-columns: repeat(2, 1fr); margin-top: 18rpx; }
+.model-grid > view { background: #f5f8f7; border-radius: 15rpx; padding: 15rpx; }
+.model-grid text { color: #82918f; font-size: 18rpx; }
+.model-grid view view { font-size: 21rpx; font-weight: 700; margin-top: 5rpx; word-break: break-all; }
+.model-egress { color: #6f817e; font-size: 19rpx; margin-top: 16rpx; }
+
+.trace-item, .evidence-item { border-top: 1rpx solid #e8eeec; margin-top: 15rpx; padding-top: 15rpx; }
+.trace-id { color: #0f6b63; font-size: 19rpx; margin-right: 12rpx; }
+.trace-name { font-size: 22rpx; font-weight: 750; }
+.trace-meta { color: #748683; font-size: 18rpx; line-height: 1.55; margin-top: 7rpx; word-break: break-all; }
+.tool-status { background: #fff0dc; border-radius: 999rpx; color: #946224; font-size: 17rpx; margin-left: auto; padding: 6rpx 10rpx; }
+.tool-success { background: #e1f2e9; color: #206f53; }
+.event-row { display: grid; gap: 12rpx; grid-template-columns: 180rpx 1fr; margin-top: 14rpx; }
+.event-state { color: #0f6b63; font-size: 18rpx; }
+.event-detail { color: #6d7f7c; font-size: 19rpx; line-height: 1.5; }
+.evidence-head { color: #59716d; font-size: 18rpx; gap: 10rpx; justify-content: flex-start; }
+.evidence-claim { font-size: 21rpx; line-height: 1.55; margin-top: 9rpx; }
+.followup-section { margin-bottom: 32rpx; }
+.followup-chip { display: inline-block; margin: 14rpx 10rpx 0 0; white-space: normal; }

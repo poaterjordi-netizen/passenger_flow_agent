@@ -5,7 +5,7 @@
     <view class="hero-subtitle">将参考日的站点客流模式复制到目标日期，不写回数据库。</view>
   </view>
 
-  <view class="notice">该功能是可追溯的基线变换，不代表生产预测准确率。</view>
+  <view class="notice">{{dataScope === 'synthetic' ? '该功能是可追溯的基线变换，不代表生产预测准确率。' : '真实数据库环境不执行基线复制预测；事件预测请使用智能分析页。'}}</view>
   <view wx:if="{{error}}" class="error-card">{{error}}</view>
   <view wx:if="{{loading}}" class="loading-state">正在加载可用日期…</view>
 

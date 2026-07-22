@@ -845,6 +845,7 @@ function ResultsView({ result }: { result: QueryResponse }) {
 const assistantExamples = [
   "列出数据库中的所有地铁站",
   "列出数据库中的所有地铁线路",
+  "给出数据库中北京地铁一号线的情况",
   "有哪些指标",
   "数据覆盖哪些日期",
   "数据库基本情况",
@@ -920,6 +921,9 @@ function AssistantRunView({ run }: { run: RunRecord }) {
   const verificationPassed = run.verification?.valid === true
   const verificationFailed = run.verification?.valid === false
   const egressCalls = run.model_egress ?? []
+  const semanticFrame = run.semantic_frame
+  const entityResolutions = run.entity_resolutions ?? []
+  const metricResolutions = run.metric_resolutions ?? []
   const approvedEgressCalls = egressCalls.filter(
     (call) => call.decision === "approved",
   ).length
@@ -949,12 +953,141 @@ function AssistantRunView({ run }: { run: RunRecord }) {
           <Badge tone="amber">failure: {run.failure_category}</Badge>
         ) : null}
         <Badge tone="slate">{run.provider}</Badge>
+        <Badge tone={run.semantic_source === "model" ? "cyan" : "amber"}>
+          semantic: {run.semantic_source ?? "未编译"}
+        </Badge>
+        <Badge tone="slate">route: {semanticFrame?.route ?? "—"}</Badge>
         <Badge tone="slate">intent: {run.intent_route}</Badge>
         <Badge tone="slate">plan: {run.planner_route}</Badge>
         <span className="ml-auto font-mono text-[11px] text-slate-600">
           {run.run_id}
         </span>
       </div>
+      {semanticFrame ? (
+        <details
+          open
+          className="rounded-xl border border-cyan-400/12 bg-cyan-400/5 p-4"
+        >
+          <summary className="cursor-pointer text-sm font-semibold text-cyan-100">
+            GPT 语义编译与确定性链接
+          </summary>
+          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <MiniStat label="执行路线" value={semanticFrame.route} />
+            <MiniStat
+              label="业务动作"
+              value={semanticFrame.operations.join("、")}
+            />
+            <MiniStat
+              label="目标类型"
+              value={semanticFrame.target_kind ?? "unspecified"}
+            />
+            <MiniStat
+              label="语义置信度"
+              value={`${Math.round(semanticFrame.confidence * 100)}%`}
+            />
+          </div>
+          <div className="mt-3 rounded-lg border border-white/7 bg-black/10 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-slate-500">
+              用户目标
+            </div>
+            <div className="mt-1 text-sm leading-6 text-slate-200">
+              {semanticFrame.goal}
+            </div>
+          </div>
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            <div className="rounded-lg border border-white/7 bg-black/10 p-3">
+              <div className="text-xs font-semibold text-slate-300">
+                实体原文 → 数据库实体
+              </div>
+              <div className="mt-2 space-y-2 text-xs text-slate-400">
+                {entityResolutions.length ? (
+                  entityResolutions.map((item) => (
+                    <div
+                      key={`${item.type}-${item.role}-${item.reference}-${item.raw_text}-${item.selected_id ?? item.status}`}
+                      className="flex flex-wrap items-center gap-2"
+                    >
+                      <Badge
+                        tone={item.status === "resolved" ? "green" : "amber"}
+                      >
+                        {item.type} · {item.reference ?? "named"} ·{" "}
+                        {item.status}
+                      </Badge>
+                      <span>“{item.raw_text}”</span>
+                      <span>→</span>
+                      <span className="font-mono text-cyan-200">
+                        {item.selected_name
+                          ? `${item.selected_name}（${item.selected_id}）`
+                          : (item.selected_id ?? "未解析")}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <span>本次没有需要链接的线路或车站实体。</span>
+                )}
+              </div>
+            </div>
+            <div className="rounded-lg border border-white/7 bg-black/10 p-3">
+              <div className="text-xs font-semibold text-slate-300">
+                指标候选 → 登记指标
+              </div>
+              <div className="mt-2 space-y-2 text-xs text-slate-400">
+                {metricResolutions.length ? (
+                  metricResolutions.map((item) => (
+                    <div
+                      key={`${item.raw_text}-${item.status}-${item.selected_metric ?? item.candidates?.join("-") ?? "unresolved"}`}
+                      className="flex flex-wrap items-center gap-2"
+                    >
+                      <Badge
+                        tone={
+                          item.status === "resolved" ||
+                          item.status === "defaulted"
+                            ? "green"
+                            : "amber"
+                        }
+                      >
+                        {item.status}
+                      </Badge>
+                      <span>“{item.raw_text}”</span>
+                      <span>→</span>
+                      <span className="font-mono text-cyan-200">
+                        {item.selected_metric ?? "未解析"}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <span>本次不需要数据库指标。</span>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            <div className="rounded-lg border border-white/7 bg-black/10 p-3 text-xs text-slate-400">
+              <div className="font-semibold text-slate-300">语义会话记忆</div>
+              <div className="mt-2 font-mono leading-5">
+                entity：
+                {JSON.stringify(
+                  run.semantic_memory_snapshot?.current_entities ?? {},
+                )}
+                <br />
+                metric：{run.semantic_memory_snapshot?.current_metric ?? "—"}
+                <br />
+                time：
+                {JSON.stringify(
+                  run.semantic_memory_snapshot?.current_time_range ?? {},
+                )}
+              </div>
+            </div>
+            <div className="rounded-lg border border-white/7 bg-black/10 p-3 text-xs text-slate-400">
+              <div className="font-semibold text-slate-300">旧路由影子对比</div>
+              <div className="mt-2 leading-5">
+                {run.semantic_disagreements?.length
+                  ? run.semantic_disagreements.join("；")
+                  : "模型语义与确定性降级语义没有结构差异，或本次直接使用降级语义。"}
+              </div>
+            </div>
+          </div>
+        </details>
+      ) : null}
       <div className="grid gap-3 rounded-xl border border-white/8 bg-white/3 p-4 sm:grid-cols-2 xl:grid-cols-6">
         <MiniStat label="Owner" value={run.owner_subject_id} />
         <MiniStat label="策略快照" value={run.policy_snapshot_id} />
@@ -1174,6 +1307,12 @@ function AssistantRunView({ run }: { run: RunRecord }) {
           <div className="mb-3 rounded-lg border border-violet-400/15 bg-violet-400/7 px-3 py-2 text-xs text-violet-100">
             GPT 通用知识回答 · 未读取 metroflow
             数据库业务行；实时信息需另接外部数据源
+          </div>
+        ) : null}
+        {run.operation_ir?.answer_policy === "llm_hybrid" ? (
+          <div className="mb-3 rounded-lg border border-cyan-400/15 bg-cyan-400/7 px-3 py-2 text-xs text-cyan-100">
+            混合回答 ·
+            数据库事实必须引用本次证据；一般知识仅用于解释与提出待验证假设
           </div>
         ) : null}
         <p className="text-sm leading-7 text-slate-200">
@@ -1700,7 +1839,7 @@ function AssistantPage() {
       <PageHeading
         eyebrow="Governed agent workflow"
         title="地铁客流智能分析"
-        description="问题先编译为 OperationIR 并匹配版本化能力；数据问题走真实工具，开放问题进入一次 GPT 通用回答，真正缺少起点、终点或目标时才追问。"
+        description="每个自由问题先由 GPT-5.6 Sol 编译为 SemanticFrame，再由后端链接真实实体与指标、生成 QueryIR 并执行；数据、通用、混合、外部与澄清五条路线在页面全程可见。"
         action={
           governance.isPending || capabilities.isPending ? (
             <Badge tone="slate">正在检测运行时</Badge>
@@ -2608,6 +2747,8 @@ function Boundary({
 export function App() {
   const [page, setPage] = useState<Page>("dashboard")
   const [menuOpen, setMenuOpen] = useState(false)
+  const publicRealShadow =
+    import.meta.env.VITE_DEPLOYMENT_PROFILE === "real-shadow"
   const governance = useQuery({
     queryKey: ["governance-status"],
     queryFn: getGovernanceStatus,
@@ -2756,6 +2897,12 @@ export function App() {
             </div>
           </div>
         </header>
+        {publicRealShadow ? (
+          <div className="border-b border-amber-300/15 bg-amber-300/7 px-4 py-2 text-center text-xs leading-5 text-amber-100/80 sm:px-6 lg:px-8">
+            临时受控体验版 · 真实历史汇总数据 · 本机 GPT-5.6 Sol ·
+            非生产运营系统；结果需人工复核
+          </div>
+        ) : null}
         <main className="mx-auto max-w-[1600px] p-4 sm:p-6 lg:p-8">
           <PageComponent />
         </main>

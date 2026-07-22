@@ -10,6 +10,7 @@ MYSQL_PIN_FILE="$RUNTIME_CONFIG_DIR/mysql-leaf.sha256"
 SOURCE_REGISTRY="$RUNTIME_CONFIG_DIR/live-source-registry.json"
 PREFLIGHT_REPORT="$RUNTIME_DATA_DIR/live-preflight-report.json"
 HERMES_COMMAND="${METRO_ASSISTANT_HERMES_COMMAND:-$HOME/.local/bin/hermes}"
+TUNNEL_MANAGER="${METRO_LIVE_TUNNEL_MANAGER:-$RUNTIME_CONFIG_DIR/manage-db-tunnel.sh}"
 
 if [[ "${METRO_LOCAL_LIVE_SHADOW_ACKNOWLEDGED:-}" != "true" ]]; then
   echo "Refusing to start: set METRO_LOCAL_LIVE_SHADOW_ACKNOWLEDGED=true for this local shadow session." >&2
@@ -37,6 +38,13 @@ set +a
 : "${METRO_DB_PORT:?METRO_DB_PORT is required in live.env}"
 : "${METRO_DB_USER:?METRO_DB_USER is required in live.env}"
 : "${METRO_DB_NAME:?METRO_DB_NAME is required in live.env}"
+if [[ "$METRO_DB_HOST" == "127.0.0.1" && "$METRO_DB_PORT" == "13306" ]]; then
+  if [[ ! -x "$TUNNEL_MANAGER" ]]; then
+    echo "The private database tunnel manager is unavailable." >&2
+    exit 2
+  fi
+  "$TUNNEL_MANAGER" start
+fi
 export METRO_DB_PASSWORD="$(security find-generic-password -a "$METRO_DB_USER" -s com.metro-passenger-flow-agent.mysql -w)"
 export METRO_DB_SSL_CA="$MYSQL_CA"
 export METRO_DB_TLS_CERT_SHA256="$(tr -d '\r\n' <"$MYSQL_PIN_FILE")"
@@ -100,8 +108,21 @@ uv run python scripts/prepare_live_shadow.py \
   --end "$METRO_PRODUCTION_DEFAULT_END" \
   --time-grain "$METRO_PRODUCTION_TIME_GRAIN"
 
-export METRO_API_ACCESS_TOKEN="$(openssl rand -hex 32)"
+export METRO_API_ACCESS_TOKEN="${METRO_API_ACCESS_TOKEN:-$(openssl rand -hex 32)}"
 export METRO_API_PROXY_TOKEN="$METRO_API_ACCESS_TOKEN"
+export METRO_WEB_BASE_PATH="${METRO_WEB_BASE_PATH:-/real-shadow/}"
+export VITE_API_URL="${VITE_API_URL:-/real-shadow}"
+export VITE_ASSISTANT_TIMEOUT_MS="${VITE_ASSISTANT_TIMEOUT_MS:-180000}"
+export VITE_DEPLOYMENT_PROFILE="${VITE_DEPLOYMENT_PROFILE:-real-shadow}"
+
+if [[ "${METRO_LIVE_EVALUATE_ONLY:-false}" == "true" ]]; then
+  LIVE_EVALUATION_OUTPUT="${METRO_LIVE_EVALUATION_OUTPUT:-$RUNTIME_DATA_DIR/live-gpt56-shadow-ranked.json}"
+  LIVE_EVALUATION_QUESTION="${METRO_LIVE_EVALUATION_QUESTION:-查询2023年9月27日6点到7点进站客流最高的3个车站}"
+  uv run python scripts/evaluate_live_gpt_shadow.py \
+    --question "$LIVE_EVALUATION_QUESTION" \
+    --output "$LIVE_EVALUATION_OUTPUT"
+  exit 0
+fi
 
 cleanup() {
   [[ -n "${WEB_PID:-}" ]] && kill "$WEB_PID" 2>/dev/null || true
@@ -121,7 +142,8 @@ if ! kill -0 "$API_PID" 2>/dev/null; then
   exit 1
 fi
 
-npm --prefix clients/web run dev -- --host 127.0.0.1 &
+npm --prefix clients/web run build
+npm --prefix clients/web run preview -- --host 127.0.0.1 --port 5173 --strictPort &
 WEB_PID=$!
-echo "Live local shadow is running: http://127.0.0.1:5173"
+echo "Live local shadow is running: http://127.0.0.1:5173/real-shadow/"
 wait "$API_PID" "$WEB_PID"

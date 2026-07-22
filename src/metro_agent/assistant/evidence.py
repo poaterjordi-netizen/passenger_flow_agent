@@ -45,7 +45,11 @@ def build_evidence_packet(question: str, results: list[ToolResult]) -> EvidenceP
 
 
 def _kind_for_tool(tool: str) -> str:
-    if tool in {"prepare_general_context", "describe_assistant_capabilities"}:
+    if tool in {
+        "prepare_general_context",
+        "prepare_external_context",
+        "describe_assistant_capabilities",
+    }:
         return "knowledge"
     if tool.endswith("readiness"):
         return "knowledge"

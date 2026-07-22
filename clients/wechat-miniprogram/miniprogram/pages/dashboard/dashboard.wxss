@@ -134,5 +134,6 @@
 }
 
 .forecast-mark { background: #fff0da; color: #b66a18; }
+.assistant-mark { background: #e8e9fa; color: #4b5798; font-size: 23rpx; }
 .quick-title { font-size: 27rpx; font-weight: 750; }
 .quick-note { color: #7b8c89; font-size: 21rpx; margin-top: 6rpx; }

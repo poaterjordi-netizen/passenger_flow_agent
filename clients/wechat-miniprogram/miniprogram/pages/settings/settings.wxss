@@ -63,6 +63,7 @@
 .cloud-title { color: #176044; font-size: 25rpx; font-weight: 750; }
 .cloud-value { color: #2b5d51; font-size: 23rpx; margin-top: 10rpx; }
 .cloud-note { color: #718b84; font-size: 19rpx; margin-top: 7rpx; word-break: break-all; }
+.local-hint { background: #eef5ff; border-radius: 14rpx; color: #536c91; font-size: 20rpx; line-height: 1.55; margin-bottom: 20rpx; padding: 15rpx; }
 
 .reset-link {
   color: #7c8f8b;

@@ -3,6 +3,7 @@
     "pages/dashboard/dashboard",
     "pages/query/query",
     "pages/forecast/forecast",
+    "pages/assistant/assistant",
     "pages/settings/settings",
     "pages/audit/audit"
   ],
@@ -22,6 +23,7 @@
       {"pagePath": "pages/dashboard/dashboard", "text": "总览"},
       {"pagePath": "pages/query/query", "text": "查询"},
       {"pagePath": "pages/forecast/forecast", "text": "预测"},
+      {"pagePath": "pages/assistant/assistant", "text": "智能"},
       {"pagePath": "pages/settings/settings", "text": "设置"}
     ]
   },

@@ -19,6 +19,7 @@ TaskType = Literal[
     "travel",
     "help",
     "general",
+    "external",
 ]
 OperationName = Literal[
     "list_entities",
@@ -41,6 +42,7 @@ OperationName = Literal[
     "travel_plan",
     "capability_help",
     "general_answer",
+    "external_answer",
 ]
 EntityType = Literal["station", "line", "direction", "date", "metric"]
 AnswerPolicy = Literal[
@@ -48,6 +50,7 @@ AnswerPolicy = Literal[
     "deterministic_summary",
     "llm_synthesis",
     "llm_general",
+    "llm_hybrid",
 ]
 CompletenessPolicy = Literal["require_complete", "reject_if_truncated"]
 FailureCategory = Literal[
@@ -67,6 +70,128 @@ FailureCategory = Literal[
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+SemanticRoute = Literal["data", "general", "hybrid", "external", "clarify"]
+SemanticOperation = Literal[
+    "discover",
+    "describe",
+    "query",
+    "aggregate",
+    "rank",
+    "compare",
+    "forecast",
+    "diagnose",
+    "explain",
+    "travel",
+    "help",
+    "alert",
+    "transfer",
+    "geo",
+    "correlate",
+    "trend",
+    "report",
+]
+
+
+class SemanticEntityMention(StrictModel):
+    """A user-language entity mention; database identifiers are deliberately absent."""
+
+    type: Literal["line", "station", "place", "event", "unknown"]
+    raw_text: str = Field(min_length=1, max_length=200)
+    role: Literal["subject", "origin", "destination", "context"] = "subject"
+    reference: Literal["named", "collection", "deictic"] = "named"
+
+
+class SemanticMetricMention(StrictModel):
+    raw_text: str = Field(min_length=1, max_length=100)
+    candidate_metrics: list[str] = Field(default_factory=list, max_length=8)
+    resolution: Literal["exact", "candidate", "unspecified", "unresolved"] = "unspecified"
+
+
+class SemanticTimeExpression(StrictModel):
+    raw_text: str | None = Field(default=None, max_length=200)
+    resolution: Literal["explicit", "default_allowed", "unspecified", "unresolved"] = (
+        "unspecified"
+    )
+
+
+class SemanticFrame(StrictModel):
+    """Open-language meaning compiled by GPT; it cannot contain SQL or physical IDs."""
+
+    schema_version: Literal["1.0"] = "1.0"
+    route: SemanticRoute
+    goal: str = Field(min_length=1, max_length=800)
+    operations: list[SemanticOperation] = Field(min_length=1, max_length=8)
+    target_kind: Literal[
+        "line",
+        "station",
+        "metric",
+        "date",
+        "dataset",
+        "capability",
+        "place",
+        "event",
+        "unspecified",
+    ] = "unspecified"
+    entity_mentions: list[SemanticEntityMention] = Field(default_factory=list, max_length=16)
+    metric_mentions: list[SemanticMetricMention] = Field(default_factory=list, max_length=8)
+    time_expression: SemanticTimeExpression = Field(default_factory=SemanticTimeExpression)
+    evidence_requirements: list[
+        Literal[
+            "database_rows",
+            "metric_definition",
+            "general_knowledge",
+            "external_live_data",
+            "navigation",
+        ]
+    ] = Field(default_factory=list, max_length=8)
+    defaults_allowed: bool = True
+    inherit_context: bool = False
+    assumptions: list[str] = Field(default_factory=list, max_length=12)
+    material_missing_fields: list[str] = Field(default_factory=list, max_length=12)
+    confidence: float = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_clarification(self) -> SemanticFrame:
+        if self.route == "clarify" and not self.material_missing_fields:
+            raise ValueError("clarify route requires material_missing_fields")
+        return self
+
+
+class EntityCandidate(StrictModel):
+    id: str
+    name: str
+    type: Literal["line", "station"]
+    confidence: float = Field(ge=0, le=1)
+    source: Literal["registered_catalog", "observed_database_entity"]
+
+
+class EntityResolution(StrictModel):
+    raw_text: str
+    type: Literal["line", "station", "place", "event", "unknown"]
+    role: Literal["subject", "origin", "destination", "context"] = "subject"
+    reference: Literal["named", "collection", "deictic"] = "named"
+    status: Literal["resolved", "ambiguous", "not_found", "not_applicable"]
+    selected_id: str | None = None
+    selected_name: str | None = None
+    candidates: list[EntityCandidate] = Field(default_factory=list, max_length=20)
+
+
+class MetricResolution(StrictModel):
+    raw_text: str
+    status: Literal["resolved", "ambiguous", "not_found", "defaulted"]
+    selected_metric: str | None = None
+    candidates: list[str] = Field(default_factory=list, max_length=20)
+
+
+class SemanticMemory(StrictModel):
+    current_entities: dict[str, list[str]] = Field(default_factory=dict)
+    current_metric: str | None = None
+    current_time_range: dict[str, str] = Field(default_factory=dict)
+    last_operations: list[SemanticOperation] = Field(default_factory=list)
+    last_route: SemanticRoute | None = None
+    updated_at: str | None = None
 
 
 class EntitySet(StrictModel):
@@ -422,11 +547,12 @@ class SessionRecord(StrictModel):
     access_scope_hash: str
     policy_snapshot_id: str
     messages: list[dict[str, str]] = Field(default_factory=list)
+    semantic_memory: SemanticMemory = Field(default_factory=SemanticMemory)
 
 
 class ModelEgressRecord(StrictModel):
     call_id: str
-    purpose: Literal["intent_candidate", "synthesis"]
+    purpose: Literal["semantic_compile", "intent_candidate", "synthesis"]
     decision: Literal["denied", "approved"]
     endpoint_policy_id: str
     provider: str
@@ -450,12 +576,25 @@ class RunRecord(StrictModel):
     owner_tenant_or_department: str
     access_scope_hash: str
     policy_snapshot_id: str
-    intent_route: Literal["deterministic", "model_candidate", "clarification"] = "deterministic"
+    intent_route: Literal[
+        "deterministic",
+        "model_candidate",
+        "semantic_model",
+        "semantic_fallback",
+        "clarification",
+    ] = "deterministic"
     planner_route: Literal["deterministic"] = "deterministic"
     model_egress: list[ModelEgressRecord] = Field(default_factory=list)
     model_runtime: ModelRuntime = Field(default_factory=ModelRuntime)
     original_question: str
     selected_context: dict[str, Any] = Field(default_factory=dict)
+    semantic_frame: SemanticFrame | None = None
+    semantic_source: Literal["model", "deterministic_fallback"] | None = None
+    semantic_shadow_frame: SemanticFrame | None = None
+    semantic_disagreements: list[str] = Field(default_factory=list)
+    entity_resolutions: list[EntityResolution] = Field(default_factory=list)
+    metric_resolutions: list[MetricResolution] = Field(default_factory=list)
+    semantic_memory_snapshot: SemanticMemory = Field(default_factory=SemanticMemory)
     intent: IntentEnvelope | None = None
     operation_ir: OperationIR | None = None
     capability_match: CapabilityMatch | None = None

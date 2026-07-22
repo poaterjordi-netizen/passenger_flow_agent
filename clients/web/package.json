@@ -8,6 +8,7 @@
     "generate-client": "openapi-ts",
     "check": "tsc --noEmit",
     "build": "npm run check && vite build",
+    "preview": "vite preview",
     "lint": "biome check .",
     "test:e2e": "playwright test"
   },

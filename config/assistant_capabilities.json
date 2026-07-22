@@ -1,11 +1,11 @@
 {
   "schema_version": "1.0",
-  "registry_version": "2026-07-21.6",
+  "registry_version": "2026-07-21.9",
   "lexicon": {
     "inventory_markers": ["列出", "所有", "全部", "有哪些", "清单", "名单", "给我看看", "给我"],
     "entity_aliases": {
       "station": ["地铁站", "车站", "站点", "各站"],
-      "line": ["地铁线路", "轨道线路", "线路", "所有线"],
+      "line": ["地铁线路", "轨道线路", "线路", "所有线", "号线"],
       "direction": ["方向", "上下行"],
       "date": ["日期", "时间范围", "哪些天", "哪几天"],
       "metric": ["指标", "度量", "口径"]
@@ -13,7 +13,7 @@
     "list_metric_phrases": ["有哪些指标", "所有指标", "指标清单", "能查什么", "可查询指标"],
     "list_date_phrases": ["有哪些日期", "所有日期", "数据日期", "覆盖哪些日期", "时间覆盖范围", "哪几天有数据"],
     "summarize_dataset_phrases": ["数据库基本情况", "数据基本情况", "数据概况", "数据范围", "有什么数据", "数据质量", "数据集摘要"],
-    "describe_markers": ["介绍", "描述", "基本情况", "详细信息", "是什么"],
+    "describe_markers": ["介绍", "描述", "基本情况", "详细信息", "是什么", "情况", "概况", "怎么样"],
     "ranking_markers": ["前三", "前五", "top", "排序", "最高", "最低", "最多", "最少", "最集中", "贡献", "峰值"],
     "travel_markers": ["出行", "出现规划", "路线", "线路规划", "怎么走", "如何去", "怎么去", "前往", "到达", "导航"],
     "help_phrases": ["你能做什么", "可以做什么", "支持哪些问题", "能回答什么", "可以问什么", "如何使用", "使用帮助", "能力清单", "功能清单"],
@@ -184,6 +184,17 @@
       "optional_slots": [],
       "completeness_policy": "require_complete",
       "answer_policy": "llm_general"
+    },
+    {
+      "id": "external_information_boundary",
+      "operations": ["external_answer"],
+      "tools": ["prepare_external_context"],
+      "entity_types": [],
+      "data_scopes": ["synthetic", "production-shadow", "production-readonly"],
+      "required_slots": ["target_query"],
+      "optional_slots": [],
+      "completeness_policy": "require_complete",
+      "answer_policy": "deterministic_summary"
     }
   ]
 }

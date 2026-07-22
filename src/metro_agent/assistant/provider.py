@@ -23,10 +23,17 @@ from metro_agent.assistant.schemas import (
     EvidencePacket,
     IntentEnvelope,
     OperationIR,
+    SemanticFrame,
     TaskPlan,
     ToolStep,
     TravelPlanSpec,
     TransferAnalysisSpec,
+)
+from metro_agent.assistant.semantic import fallback_semantic_frame
+from metro_agent.assistant.text_normalization import (
+    extract_line_numbers,
+    line_number,
+    normalize_user_question,
 )
 
 StructuredT = TypeVar("StructuredT", bound=BaseModel)
@@ -58,6 +65,9 @@ class FakeProvider:
     ) -> StructuredT:
         if schema is IntentEnvelope:
             return schema.model_validate(self._intent(context))
+        if schema is SemanticFrame:
+            intent = IntentEnvelope.model_validate(self._intent(context))
+            return schema.model_validate(fallback_semantic_frame(str(context["question"]), intent))
         if schema is TaskPlan:
             return schema.model_validate(self._plan(context))
         raise ValueError(f"unsupported fake structured schema: {schema.__name__}")
@@ -142,7 +152,7 @@ class FakeProvider:
         question = str(context["question"])
         previous = _previous_user_question(context.get("recent_history", []))
         inherited = previous if _is_follow_up(question) else ""
-        interpretation = f"{inherited} {question}".strip()
+        interpretation = normalize_user_question(f"{inherited} {question}".strip())
         text = interpretation.lower()
         task_type = "general"
         travel_spec = _extract_travel_plan(interpretation)
@@ -213,11 +223,18 @@ class FakeProvider:
             "resolved_range": _resolve_time_range(requested_period, catalog["default_time_range"]),
         }
         line_numbers = (
-            [int(value) for value in re.findall(r"(\d+)\s*号线", interpretation)]
+            extract_line_numbers(interpretation)
             if task_type not in {"general", "help", "travel"}
             else []
         )
-        unknown_lines = [value for value in line_numbers if value > len(catalog.get("lines", []))]
+        available_lines = catalog.get("lines", [])
+        unknown_lines = [
+            value
+            for value in line_numbers
+            if context.get("data_scope") == "synthetic"
+            and available_lines
+            and value > len(available_lines)
+        ]
         ambiguities = [
             f"当前 synthetic catalog 不含 {value} 号线，请改用可用线路。" for value in unknown_lines
         ]
@@ -342,6 +359,15 @@ class FakeProvider:
                 )
             ]
             expected = ["general answer provenance and capability boundary"]
+        elif operation and operation.operation == "external_answer":
+            steps = [
+                ToolStep(
+                    step_id="s1",
+                    tool="prepare_external_context",
+                    arguments={"question": operation.target_query},
+                )
+            ]
+            expected = ["external live-data requirement and capability boundary"]
         elif operation and operation.operation == "travel_plan":
             steps = [
                 ToolStep(
@@ -676,9 +702,10 @@ class FakeProvider:
 
 
 class OpenAICompatibleProvider:
-    """OpenAI-compatible adapter isolated from all business logic."""
+    """Stateless OpenAI Responses API adapter isolated from business logic."""
 
     name = "gpt-5.6-sol"
+    _REASONING_EFFORTS = {"none", "low", "medium", "high", "xhigh", "max"}
 
     def __init__(
         self,
@@ -686,6 +713,7 @@ class OpenAICompatibleProvider:
         api_key: str | None = None,
         base_url: str | None = None,
         model: str = "gpt-5.6-sol",
+        reasoning_effort: str | None = None,
         timeout: float = 90.0,
     ) -> None:
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
@@ -693,11 +721,19 @@ class OpenAICompatibleProvider:
             base_url or os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
         ).rstrip("/")
         self.model = model
+        self.reasoning_effort = (
+            reasoning_effort
+            or os.environ.get("METRO_ASSISTANT_REASONING_EFFORT")
+            or "medium"
+        ).strip().lower()
         self.timeout = timeout
         self.name = f"openai-compatible:{model}"
         self.usage_records: list[dict[str, Any]] = []
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY is required for OpenAICompatibleProvider")
+        if self.reasoning_effort not in self._REASONING_EFFORTS:
+            allowed = ", ".join(sorted(self._REASONING_EFFORTS))
+            raise ValueError(f"METRO_ASSISTANT_REASONING_EFFORT must be one of: {allowed}")
 
     def generate_structured(
         self, prompt: str, schema: type[StructuredT], *, context: dict[str, Any]
@@ -724,15 +760,14 @@ class OpenAICompatibleProvider:
     def stream_text(self, prompt: str, *, context: dict[str, Any]) -> Iterator[str]:
         body = {
             "model": self.model,
-            "messages": [
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
-            ],
-            "temperature": 0,
+            "instructions": prompt,
+            "input": json.dumps(context, ensure_ascii=False),
+            "reasoning": {"effort": self.reasoning_effort},
+            "store": False,
             "stream": True,
         }
         request = urllib.request.Request(
-            f"{self.base_url}/chat/completions",
+            f"{self.base_url}/responses",
             data=json.dumps(body).encode("utf-8"),
             headers={
                 "Authorization": f"Bearer {self.api_key}",
@@ -750,33 +785,41 @@ class OpenAICompatibleProvider:
                     if data == "[DONE]":
                         break
                     payload = json.loads(data)
-                    token = payload["choices"][0]["delta"].get("content")
-                    if token:
-                        yield token
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+                    event_type = payload.get("type") if isinstance(payload, dict) else None
+                    if event_type == "response.output_text.delta":
+                        token = payload.get("delta")
+                        if isinstance(token, str) and token:
+                            yield token
+                    elif event_type == "error":
+                        raise RuntimeError("language model streaming request failed")
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+        ) as exc:
             raise RuntimeError("language model streaming request failed") from exc
 
     def _request(self, prompt: str, context: dict[str, Any], schema: type[BaseModel] | None) -> str:
         started = time.monotonic()
         body: dict[str, Any] = {
             "model": self.model,
-            "messages": [
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
-            ],
-            "temperature": 0,
+            "instructions": prompt,
+            "input": json.dumps(context, ensure_ascii=False),
+            "reasoning": {"effort": self.reasoning_effort},
+            "store": False,
         }
         if schema is not None:
-            body["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {
+            body["text"] = {
+                "format": {
+                    "type": "json_schema",
                     "name": schema.__name__,
                     "strict": True,
                     "schema": schema.model_json_schema(),
-                },
+                }
             }
         request = urllib.request.Request(
-            f"{self.base_url}/chat/completions",
+            f"{self.base_url}/responses",
             data=json.dumps(body).encode("utf-8"),
             headers={
                 "Authorization": f"Bearer {self.api_key}",
@@ -806,15 +849,15 @@ class OpenAICompatibleProvider:
         }
         if isinstance(usage, dict):
             mapping = {
-                "prompt_tokens": "input_tokens",
-                "completion_tokens": "output_tokens",
+                "input_tokens": "input_tokens",
+                "output_tokens": "output_tokens",
                 "total_tokens": "total_tokens",
             }
             for source, target in mapping.items():
                 value = usage.get(source)
                 if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
                     record[target] = value
-            details = usage.get("completion_tokens_details")
+            details = usage.get("output_tokens_details")
             if isinstance(details, dict):
                 reasoning = details.get("reasoning_tokens")
                 if (
@@ -825,10 +868,38 @@ class OpenAICompatibleProvider:
                     record["reasoning_tokens"] = reasoning
         self.usage_records.append(record)
         try:
-            return payload["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as exc:
+            return self._response_text(payload)
+        except (KeyError, TypeError, ValueError) as exc:
             self._mark_last_usage_failed()
             raise RuntimeError("language model returned an invalid response") from exc
+
+    @staticmethod
+    def _response_text(payload: Any) -> str:
+        if not isinstance(payload, dict):
+            raise TypeError("response payload must be an object")
+        helper_text = payload.get("output_text")
+        if isinstance(helper_text, str) and helper_text:
+            return helper_text
+        chunks: list[str] = []
+        output = payload.get("output")
+        if not isinstance(output, list):
+            raise KeyError("output")
+        for item in output:
+            if not isinstance(item, dict) or item.get("type") != "message":
+                continue
+            content = item.get("content")
+            if not isinstance(content, list):
+                continue
+            for part in content:
+                if not isinstance(part, dict) or part.get("type") != "output_text":
+                    continue
+                text = part.get("text")
+                if isinstance(text, str):
+                    chunks.append(text)
+        result = "".join(chunks)
+        if not result:
+            raise ValueError("response contained no output text")
+        return result
 
     def _mark_last_usage_failed(self) -> None:
         if self.usage_records:
@@ -1006,7 +1077,7 @@ def provider_endpoint_identity(provider: LLMProvider) -> dict[str, str]:
     model = str(getattr(provider, "model", ""))
     if isinstance(provider, OpenAICompatibleProvider):
         provider_kind = "openai-compatible"
-        target = provider.base_url
+        target = f"{provider.base_url}/responses"
     elif isinstance(provider, HermesCodexProvider):
         provider_kind = "hermes-openai-codex"
         resolved = shutil.which(provider.command) or provider.command
@@ -1122,10 +1193,14 @@ def _is_follow_up(question: str) -> bool:
 
 
 def _extract_lines(question: str, available: list[str]) -> list[str]:
-    aliases = {f"{index + 1}号线": line for index, line in enumerate(available)}
-    compact = question.replace(" ", "")
-    found = [line for line in available if line.lower() in question.lower()]
-    found.extend(line for alias, line in aliases.items() if alias in compact)
+    normalized = normalize_user_question(question)
+    found = [line for line in available if line.lower() in normalized.lower()]
+    for number in extract_line_numbers(normalized):
+        numbered = [line for line in available if line_number(line) == number]
+        if numbered:
+            found.extend(numbered)
+        elif 1 <= number <= len(available):
+            found.append(available[number - 1])
     return list(dict.fromkeys(found))
 
 
@@ -1212,7 +1287,7 @@ def _business_route_applies(candidate: str, question: str) -> bool:
 
 
 def _is_query_question(question: str) -> bool:
-    compact = re.sub(r"\s+", "", question.lower())
+    compact = re.sub(r"\s+", "", normalize_user_question(question).lower())
     domain = any(
         token in compact
         for token in (
@@ -1251,6 +1326,15 @@ def _is_query_question(question: str) -> bool:
             "清单",
             "名单",
             "给我",
+            "给出",
+            "查看",
+            "看看",
+            "说明",
+            "介绍",
+            "描述",
+            "情况",
+            "概况",
+            "怎么样",
             "明细",
         )
     )

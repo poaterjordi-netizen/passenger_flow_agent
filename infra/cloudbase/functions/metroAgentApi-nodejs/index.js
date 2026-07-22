@@ -4,7 +4,7 @@ const crypto = require("node:crypto")
 const fs = require("node:fs")
 const path = require("node:path")
 
-const VERSION = "0.3.0"
+const VERSION = "0.4.3"
 const DATA_DIR = process.env.METRO_AGENT_DATA_DIR
   ? path.resolve(process.env.METRO_AGENT_DATA_DIR)
   : __dirname
@@ -32,6 +32,7 @@ const DIMENSION_LABELS = {
   time: "时间"
 }
 const audits = new Map()
+const ASSISTANT_PROXY_LIMIT = 4 * 1024 * 1024
 
 class RouteNotFound extends Error {}
 
@@ -44,6 +45,192 @@ function hasExactKeys(value, expected) {
   const actual = Object.keys(value).sort()
   const wanted = [...expected].sort()
   return actual.length === wanted.length && actual.every((item, index) => item === wanted[index])
+}
+
+function assistantBackend() {
+  const raw = String(process.env.METRO_ASSISTANT_API_BASE_URL || "").trim().replace(/\/+$/, "")
+  if (!raw) return null
+  try {
+    const value = new URL(raw)
+    const localHttp = process.env.METRO_ASSISTANT_ALLOW_HTTP === "true" &&
+      value.protocol === "http:" && ["127.0.0.1", "localhost"].includes(value.hostname)
+    if (value.protocol !== "https:" && !localHttp) return null
+    if ((value.pathname && value.pathname !== "/") || value.search || value.hash) return null
+    return value.origin
+  } catch (error) {
+    return null
+  }
+}
+
+function assistantHeaders() {
+  const headers = { accept: "application/json", "content-type": "application/json" }
+  const token = String(process.env.METRO_ASSISTANT_API_ACCESS_TOKEN || "").trim()
+  if (token) headers.authorization = `Bearer ${token}`
+  return headers
+}
+
+async function fetchWithNetworkRetry(url, options, attempts) {
+  let lastError
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await fetch(url, options)
+    } catch (error) {
+      lastError = error
+      if ((error && error.name === "AbortError") || attempt + 1 >= attempts) throw error
+      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)))
+    }
+  }
+  throw lastError
+}
+
+async function assistantProxyHealth() {
+  const backend = assistantBackend()
+  if (!backend) {
+    return {
+      configured: false,
+      reachable: false,
+      status: "unconfigured",
+      transport: "server_side_allowlisted_proxy"
+    }
+  }
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 5000)
+  const startedAt = Date.now()
+  try {
+    const upstream = await fetchWithNetworkRetry(`${backend}/health`, {
+      method: "GET",
+      headers: assistantHeaders(),
+      signal: controller.signal
+    }, 3)
+    if (!upstream.ok) {
+      return {
+        configured: true,
+        reachable: false,
+        status: `upstream_http_${upstream.status}`,
+        transport: "server_side_allowlisted_proxy"
+      }
+    }
+    const data = await upstream.json().catch(() => ({}))
+    return {
+      configured: true,
+      reachable: true,
+      status: "ready",
+      transport: "server_side_allowlisted_proxy",
+      latency_ms: Date.now() - startedAt,
+      upstream_version: typeof data.version === "string" ? data.version : null,
+      upstream_environment: typeof data.environment === "string" ? data.environment : null,
+      upstream_data_scope: typeof data.data_scope === "string" ? data.data_scope : null
+    }
+  } catch (error) {
+    return {
+      configured: true,
+      reachable: false,
+      status: error && error.name === "AbortError" ? "timeout" : "unreachable",
+      transport: "server_side_allowlisted_proxy"
+    }
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+function assistantRoute(method, requestPath, payload) {
+  const routes = [
+    ["GET", /^\/api\/v1\/assistant\/capabilities$/],
+    ["POST", /^\/api\/v1\/assistant\/sessions$/],
+    ["POST", /^\/api\/v1\/assistant\/sessions\/session-[0-9a-f]{32}\/messages$/],
+    ["GET", /^\/api\/v1\/assistant\/runs\/run-[0-9a-f]{32}$/],
+    ["GET", /^\/api\/v1\/assistant\/runs\/run-[0-9a-f]{32}\/events$/],
+    ["POST", /^\/api\/v1\/assistant\/runs\/run-[0-9a-f]{32}\/feedback$/]
+  ]
+  if (!routes.some(([allowedMethod, pattern]) => method === allowedMethod && pattern.test(requestPath))) {
+    return false
+  }
+  if (method === "GET" && !hasExactKeys(payload, [])) {
+    throw new Error("assistant proxy: GET body must be empty")
+  }
+  if (requestPath.endsWith("/sessions") && !hasExactKeys(payload, [])) {
+    throw new Error("assistant proxy: session body must be empty")
+  }
+  if (requestPath.endsWith("/messages")) {
+    if (!hasExactKeys(payload, ["message"]) || typeof payload.message !== "string") {
+      throw new Error("assistant proxy: message body is invalid")
+    }
+    const message = payload.message.trim()
+    if (!message || message.length > 4000) throw new Error("assistant proxy: message length is invalid")
+  }
+  if (requestPath.endsWith("/feedback")) {
+    const keys = Object.keys(payload).sort()
+    const accepted = ["accepted", "correction"]
+    const adopted = ["accepted", "adopted_response", "correction"]
+    if (
+      !isObject(payload) ||
+      (!hasSameMembers(keys, accepted) && !hasSameMembers(keys, adopted)) ||
+      typeof payload.accepted !== "boolean" ||
+      typeof payload.correction !== "string" ||
+      !payload.correction.trim() ||
+      payload.correction.length > 4000
+    ) {
+      throw new Error("assistant proxy: feedback body is invalid")
+    }
+  }
+  return true
+}
+
+async function proxyAssistant(method, requestPath, payload) {
+  const backend = assistantBackend()
+  if (!backend) {
+    return response(503, {
+      error: {
+        code: "assistant_backend_unconfigured",
+        message: "智能分析后端代理尚未配置"
+      }
+    })
+  }
+  const controller = new AbortController()
+  const configuredTimeout = Number(process.env.METRO_ASSISTANT_PROXY_TIMEOUT_MS || 120000)
+  const timeoutMs = Math.min(
+    180000,
+    Math.max(1000, Number.isFinite(configuredTimeout) ? configuredTimeout : 120000)
+  )
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  const headers = assistantHeaders()
+  try {
+    // Quick Tunnels have no availability SLA. fetch only retries transport
+    // failures that happen before an HTTP response; AbortError still stops at
+    // the function deadline. Reusing the same request protects phone testing
+    // from transient CloudBase -> tunnel connection failures.
+    const upstream = await fetchWithNetworkRetry(`${backend}${requestPath}`, {
+      method,
+      headers,
+      body: method === "POST" ? JSON.stringify(payload) : undefined,
+      signal: controller.signal
+    }, 3)
+    const declaredLength = Number(upstream.headers.get("content-length") || 0)
+    if (declaredLength > ASSISTANT_PROXY_LIMIT) {
+      return response(502, { error: { code: "assistant_response_too_large", message: "智能分析响应超过代理上限" } })
+    }
+    const body = await upstream.text()
+    if (Buffer.byteLength(body, "utf8") > ASSISTANT_PROXY_LIMIT) {
+      return response(502, { error: { code: "assistant_response_too_large", message: "智能分析响应超过代理上限" } })
+    }
+    let data
+    try {
+      data = body ? JSON.parse(body) : {}
+    } catch (error) {
+      return response(502, { error: { code: "assistant_invalid_response", message: "智能分析后端返回了无效响应" } })
+    }
+    return response(upstream.status, data)
+  } catch (error) {
+    const timedOut = error && error.name === "AbortError"
+    return response(timedOut ? 504 : 502, {
+      error: {
+        code: timedOut ? "assistant_backend_timeout" : "assistant_backend_unavailable",
+        message: timedOut ? "智能分析后端响应超时" : "智能分析后端暂时不可用"
+      }
+    })
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 function parseCsv(content) {
@@ -351,12 +538,16 @@ function catalog(registry, sourceRows) {
   }
 }
 
-function route(event) {
+async function route(event) {
   const requestPath = event.path
   const method = String(event.method || "GET").toUpperCase()
   const payload = event.data === undefined || event.data === null ? {} : event.data
   if (typeof requestPath !== "string" || !isObject(payload)) {
     throw new Error("request path and data must be structured values")
+  }
+  if (requestPath.startsWith("/api/v1/assistant/")) {
+    if (!assistantRoute(method, requestPath, payload)) throw new RouteNotFound("route not found")
+    return proxyAssistant(method, requestPath, payload)
   }
   const registry = loadRegistry()
   const sourceRows = loadRows()
@@ -366,7 +557,8 @@ function route(event) {
       service: "metro-passenger-flow-api",
       version: VERSION,
       environment: "cloudbase-wechat",
-      data_scope: "synthetic"
+      data_scope: "synthetic",
+      assistant_proxy: await assistantProxyHealth()
     }
   }
   if (method === "GET" && requestPath === "/api/v1/catalog") return catalog(registry, sourceRows)
@@ -391,7 +583,8 @@ exports.main = async (event) => {
     return response(422, { error: { code: "invalid_request", message: "request must be an object" } })
   }
   try {
-    return response(200, route(event))
+    const result = await route(event)
+    return result && Number.isInteger(result.statusCode) ? result : response(200, result)
   } catch (error) {
     if (error instanceof RouteNotFound) return response(404, { detail: error.message })
     if (error instanceof Error) {

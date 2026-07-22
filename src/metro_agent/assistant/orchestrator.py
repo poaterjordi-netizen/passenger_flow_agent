@@ -37,9 +37,21 @@ from metro_agent.assistant.schemas import (
     ModelEgressRecord,
     ModelRuntime,
     RunRecord,
+    SemanticFrame,
+    SemanticMemory,
     TaskPlan,
     ToolStep,
     ToolResult,
+)
+from metro_agent.assistant.semantic import (
+    compare_semantic_frames,
+    fallback_semantic_frame,
+    intent_from_semantics,
+    reconcile_material_semantics,
+    resolve_entities,
+    resolve_metrics,
+    update_semantic_memory,
+    validate_and_normalize_frame,
 )
 from metro_agent.assistant.tool_registry import ToolRegistry
 from metro_agent.assistant.trace_store import TraceRepository, TraceStore
@@ -111,9 +123,15 @@ class AssistantService:
                 "architecture": [
                     {
                         "id": "understand",
-                        "label": "意图理解",
+                        "label": "通用语义编译",
+                        "owner": "llm",
+                        "detail": "每个自由问题优先由 GPT 输出严格 SemanticFrame；模型不可用才降级到旧解析器。",
+                    },
+                    {
+                        "id": "link",
+                        "label": "实体与指标链接",
                         "owner": "deterministic",
-                        "detail": "高置信规则直接解析；仅在规则 abstain 且策略允许时让模型选择候选。",
+                        "detail": "保留用户原文，再从准入目录或观测实体中解析真实 ID；模型不能填写 ID。",
                     },
                     {
                         "id": "plan",
@@ -137,7 +155,7 @@ class AssistantService:
                         "id": "synthesize",
                         "label": "证据化回答",
                         "owner": "llm",
-                        "detail": "目录与清单零模型渲染；复杂分析才由模型基于 EvidencePacket 组织语言。",
+                        "detail": "目录与清单跳过第二次模型合成；复杂分析才由模型基于 EvidencePacket 组织语言。",
                     },
                     {
                         "id": "verify",
@@ -153,8 +171,9 @@ class AssistantService:
                     },
                 ],
                 "model_responsibilities": [
-                    "在确定性解析 abstain 时对受控候选意图消歧",
-                    "仅在数据出域策略明确批准时根据 EvidencePacket 组织可读回答",
+                    "把任意自然语言编译为 data/general/hybrid/external/clarify SemanticFrame",
+                    "识别目标、业务动作、实体原文、指标候选、时间表达和证据需求",
+                    "仅在复杂分析或混合问题中根据 EvidencePacket 组织可读回答",
                 ],
                 "deterministic_controls": [
                     "catalog、权限、版本、时间和实体硬校验",
@@ -162,6 +181,8 @@ class AssistantService:
                     "参数化确定性工具和自由 SQL 禁止",
                     "完整性、截断、EvidencePacket 引用与数字支持校验",
                     "OperationIR、能力注册表和 CoverageEvidence 覆盖语义校验",
+                    "模型语义与确定性降级语义逐次对比并记录差异",
+                    "只保存实体、指标、时间和动作的会话语义记忆，不保存客流事实",
                     "session/run/audit owner 与访问范围哈希",
                     "模型数据出域策略和字段摘要审计",
                 ],
@@ -240,7 +261,8 @@ class AssistantService:
                     request.adopted_response,
                     run.evidence,
                     allow_general_knowledge=bool(
-                        run.operation_ir and run.operation_ir.answer_policy == "llm_general"
+                        run.operation_ir
+                        and run.operation_ir.answer_policy in {"llm_general", "llm_hybrid"}
                     ),
                 )
                 if not adopted_verification.valid:
@@ -280,6 +302,7 @@ class AssistantService:
         session = self.trace_store.get_session(session_id, access_context)
         context = self.context_builder.build(request.message, session.messages, access_context)
         provider_calls = 0
+        semantic_model_failed = False
         usage_offset = len(getattr(self.provider, "usage_records", []))
         run = RunRecord(
             run_id=f"run-{uuid.uuid4().hex}",
@@ -303,37 +326,24 @@ class AssistantService:
                 "prompt_manifest": prompts.manifest(),
                 "authorization": context["authorization"],
             },
+            semantic_memory_snapshot=session.semantic_memory,
         )
         self._event(run, "RECEIVE", "用户问题已进入状态机")
         self.trace_store.save_run(run, access_context)
         try:
-            self._event(run, "UNDERSTAND", "确定性解析或受控模型候选路由")
+            self._event(run, "UNDERSTAND", "GPT 优先语义编译，确定性解析仅作故障降级")
             protected_intent = FakeProvider().generate_structured(
                 prompts.INTENT_PARSER,
                 IntentEnvelope,
                 context=context,
             )
-            deterministic_route = (
-                "clarification"
-                if protected_intent.needs_clarification or protected_intent.ambiguities
-                else "confident"
-                if self.operation_compiler.is_high_confidence(request.message, protected_intent)
-                else "abstain"
-            )
-            if deterministic_route == "confident":
-                intent = protected_intent
-                run.intent_route = "deterministic"
-            elif deterministic_route == "clarification":
-                intent = protected_intent
-                run.intent_route = "clarification"
-            else:
+            shadow_frame = fallback_semantic_frame(request.message, protected_intent)
+            run.semantic_shadow_frame = shadow_frame
+            semantic_frame = shadow_frame
+            run.semantic_source = "deterministic_fallback"
+            if not isinstance(self.provider, FakeProvider):
                 endpoint_identity = provider_endpoint_identity(self.provider)
-                intent_context = _intent_outbound_context(context, protected_intent)
-                intent_prompt = (
-                    f"{prompts.INTENT_PARSER}\n"
-                    "Propose one candidate within candidate_domain. Do not invent catalog "
-                    "entities or permissions. immutable_scope is server-owned and will be locked."
-                )
+                semantic_context = _semantic_outbound_context(context, session.semantic_memory)
                 allowed = _may_call_model(
                     access_context,
                     self.data_service.data_scope,
@@ -343,51 +353,93 @@ class AssistantService:
                 call_index = self._start_model_egress(
                     run,
                     access_context,
-                    purpose="intent_candidate",
-                    prompt=intent_prompt,
-                    outbound_context=intent_context,
-                    schema=IntentEnvelope,
+                    purpose="semantic_compile",
+                    prompt=prompts.SEMANTIC_COMPILER,
+                    outbound_context=semantic_context,
+                    schema=SemanticFrame,
                     endpoint_identity=endpoint_identity,
                     allowed=allowed,
                 )
                 if allowed:
                     provider_calls += 1
                     try:
-                        candidate = self.provider.generate_structured(
-                            intent_prompt,
-                            IntentEnvelope,
-                            context=intent_context,
+                        candidate_frame = self.provider.generate_structured(
+                            prompts.SEMANTIC_COMPILER,
+                            SemanticFrame,
+                            context=semantic_context,
                         )
-                    except Exception:
+                        semantic_frame = validate_and_normalize_frame(
+                            candidate_frame, request.message
+                        )
+                        semantic_frame = reconcile_material_semantics(
+                            semantic_frame, shadow_frame
+                        )
+                    except Exception as exc:
+                        semantic_model_failed = True
                         self._finish_model_egress(run, access_context, call_index, "failed")
-                        raise
-                    self._finish_model_egress(run, access_context, call_index, "succeeded")
-                    intent = _lock_protected_intent(candidate, protected_intent)
-                    verify_candidate_intent(intent, context["catalog"], access_context)
-                    run.intent_route = "model_candidate"
+                        self._event(
+                            run,
+                            "SEMANTIC_FALLBACK",
+                            f"模型语义无效或不可用，启用确定性降级：{type(exc).__name__}",
+                        )
+                    else:
+                        self._finish_model_egress(run, access_context, call_index, "succeeded")
+                        run.semantic_source = "model"
+                        run.intent_route = "semantic_model"
                 else:
-                    intent = protected_intent.model_copy(
-                        update={
-                            "needs_clarification": True,
-                            "ambiguities": [
-                                *protected_intent.ambiguities,
-                                "确定性解析置信度不足，且 Intent 出域策略或端点绑定未批准。",
-                            ],
-                        }
+                    self._event(
+                        run,
+                        "SEMANTIC_FALLBACK",
+                        "语义编译模型出域未获批准，启用确定性降级",
                     )
-                    run.intent_route = "clarification"
+            if run.semantic_source == "deterministic_fallback":
+                run.intent_route = (
+                    "deterministic" if isinstance(self.provider, FakeProvider) else "semantic_fallback"
+                )
+            run.semantic_frame = semantic_frame
+            run.semantic_disagreements = compare_semantic_frames(semantic_frame, shadow_frame)
+            self._event(
+                run,
+                "SEMANTIC_FRAME",
+                f"{run.semantic_source}:{semantic_frame.route}:"
+                f"{','.join(semantic_frame.operations)}",
+            )
+            entity_resolutions = resolve_entities(
+                semantic_frame,
+                self.data_service,
+                context["catalog"],
+                access_context,
+            )
+            metric_resolutions = resolve_metrics(
+                semantic_frame,
+                context["catalog"],
+                session.semantic_memory,
+            )
+            run.entity_resolutions = entity_resolutions
+            run.metric_resolutions = metric_resolutions
+            self._event(
+                run,
+                "LINK_SEMANTICS",
+                f"实体 {len(entity_resolutions)} 个，指标 {len(metric_resolutions)} 个",
+            )
+            intent = intent_from_semantics(
+                semantic_frame,
+                protected_intent,
+                entity_resolutions,
+                metric_resolutions,
+                session.semantic_memory,
+            )
             intent = _apply_relative_period_availability_gate(
                 intent, request.message, context["catalog"]
             )
             verify_candidate_intent(intent, context["catalog"], access_context)
             run.intent = intent
             context["intent"] = intent.model_dump(mode="json")
-            operation = self.operation_compiler.compile(
+            operation = self.operation_compiler.compile_semantic(
                 request.message,
+                semantic_frame,
                 intent,
-                route_confidence=(
-                    "model_candidate" if run.intent_route == "model_candidate" else "high"
-                ),
+                entity_resolutions,
             )
             capability_match = self.capability_registry.match(
                 operation,
@@ -395,9 +447,15 @@ class AssistantService:
                 available_tools=set(self.tools.names),
             )
             if capability_match.status == "matched":
-                operation = operation.model_copy(
-                    update={"answer_policy": capability_match.answer_policy}
+                answer_policy = (
+                    "llm_hybrid"
+                    if semantic_frame.route == "hybrid"
+                    else "deterministic_summary"
+                    if semantic_frame.route == "data"
+                    and set(semantic_frame.operations) <= {"query", "aggregate"}
+                    else capability_match.answer_policy
                 )
+                operation = operation.model_copy(update={"answer_policy": answer_policy})
             elif capability_match.status == "missing_slots":
                 slot_labels = {"origin": "起点", "destination": "终点"}
                 missing_text = "、".join(
@@ -428,8 +486,17 @@ class AssistantService:
             self._event(run, "CLARIFY", "检查歧义和追问门")
             if intent.needs_clarification:
                 questions = intent.ambiguities or ["请补充时间、线路、站点或指标范围。"]
+                not_found = [
+                    item
+                    for item in entity_resolutions
+                    if item.status == "not_found"
+                ]
                 run.response = AssistantResponse(
-                    answer="当前任务存在会显著影响执行结果的歧义，需要补充信息。",
+                    answer=(
+                        "当前准入数据库时间窗中没有找到所述实体，未将其改成通用知识回答。"
+                        if not_found
+                        else "当前任务仍缺少会显著改变执行结果的信息，需要补充。"
+                    ),
                     limitations=["在歧义解决前未调用任何业务工具。"],
                     follow_up_questions=questions,
                 )
@@ -446,6 +513,10 @@ class AssistantService:
                         {"role": "assistant", "content": "；".join(questions)},
                     ]
                 )
+                session.semantic_memory = update_semantic_memory(
+                    session.semantic_memory, semantic_frame, intent
+                )
+                run.semantic_memory_snapshot = session.semantic_memory.model_copy(deep=True)
                 self.trace_store.save_session(session, access_context)
                 self.trace_store.save_run(run, access_context)
                 return run.model_dump(mode="json")
@@ -494,10 +565,16 @@ class AssistantService:
                 raise ValueError("task plan expected evidence was not produced")
 
             self._event(run, "SYNTHESIZE", "从 EvidencePacket 生成业务回答")
-            model_answer = operation.answer_policy in {"llm_synthesis", "llm_general"}
+            model_answer = operation.answer_policy in {
+                "llm_synthesis",
+                "llm_general",
+                "llm_hybrid",
+            }
             context["synthesis_prompt"] = (
                 prompts.GENERAL_SYNTHESIZE
                 if operation.answer_policy == "llm_general"
+                else prompts.HYBRID_SYNTHESIZE
+                if operation.answer_policy == "llm_hybrid"
                 else prompts.SYNTHESIZE
             )
             synthesis_provider: LLMProvider
@@ -510,6 +587,17 @@ class AssistantService:
                     request.message,
                     evidence,
                     context=context,
+                )
+            elif semantic_model_failed:
+                response = FakeProvider().synthesize_from_evidence(
+                    request.message,
+                    evidence,
+                    context=context,
+                )
+                self._event(
+                    run,
+                    "SYNTHESIS_FALLBACK",
+                    "本次语义模型调用失败，最终回答改用确定性渲染",
                 )
             else:
                 endpoint_identity = provider_endpoint_identity(self.provider)
@@ -556,14 +644,31 @@ class AssistantService:
                         "MODEL_EGRESS_DENIED",
                         "证据未发送给模型，改用确定性渲染器",
                     )
+            response = _apply_server_owned_runtime_limitations(
+                response,
+                data_scope=self.data_service.data_scope,
+            )
             run.response = response
             self._event(run, "VERIFY", "核对证据引用、数字和失败步骤")
-            run.verification = verify_response(
+            verification = verify_response(
                 response,
                 evidence,
-                allow_general_knowledge=operation.answer_policy == "llm_general",
+                allow_general_knowledge=operation.answer_policy in {"llm_general", "llm_hybrid"},
             )
-            if not run.verification.valid:
+            if not verification.valid and model_answer:
+                response = _apply_server_owned_runtime_limitations(
+                    _deterministic_response(operation.operation, evidence),
+                    data_scope=self.data_service.data_scope,
+                )
+                verification = verify_response(response, evidence)
+                self._event(
+                    run,
+                    "VERIFICATION_FALLBACK",
+                    "模型回答未通过证据核验，改用确定性证据渲染",
+                )
+            run.response = response
+            run.verification = verification
+            if not verification.valid:
                 raise ValueError("assistant response failed evidence verification")
             run.dataset_eligibility = DatasetEligibility(
                 eligible=False,
@@ -585,6 +690,10 @@ class AssistantService:
                     {"role": "assistant", "content": response.answer},
                 ]
             )
+            session.semantic_memory = update_semantic_memory(
+                session.semantic_memory, semantic_frame, intent
+            )
+            run.semantic_memory_snapshot = session.semantic_memory.model_copy(deep=True)
             self.trace_store.save_session(session, access_context)
             self.trace_store.save_run(run, access_context)
             return run.model_dump(mode="json")
@@ -890,6 +999,21 @@ def _deterministic_response(operation: str, evidence: EvidencePacket) -> Assista
     )
 
 
+def _apply_server_owned_runtime_limitations(
+    response: AssistantResponse,
+    *,
+    data_scope: str,
+) -> AssistantResponse:
+    """Attach deployment-state limitations independently of model wording."""
+
+    limitations = list(response.limitations)
+    if data_scope == "production-shadow" and not any(
+        "production-shadow" in item for item in limitations
+    ):
+        limitations.append("当前结果属于 production-shadow，不得作为运营处置依据。")
+    return response.model_copy(update={"limitations": limitations})
+
+
 def _capability_readiness_plan(intent: IntentEnvelope) -> TaskPlan:
     return TaskPlan(
         plan_id=f"plan-{intent.task_type}-capability-readiness",
@@ -1047,6 +1171,46 @@ def _intent_outbound_context(
     }
 
 
+def _semantic_outbound_context(
+    context: dict[str, Any], memory: SemanticMemory
+) -> dict[str, Any]:
+    """Bounded semantic context: no rows, physical schema, credentials, or prior answers."""
+
+    catalog = context["catalog"]
+    recent_user_questions = [
+        item.get("content", "")
+        for item in context.get("recent_history", [])[-6:]
+        if item.get("role") == "user"
+    ]
+    return {
+        "question": context["question"],
+        "data_scope": context["data_scope"],
+        "semantic_memory": memory.model_dump(mode="json"),
+        "recent_user_questions": recent_user_questions[-3:],
+        "catalog_contract": {
+            "city": catalog.get("city"),
+            "default_time_range": catalog.get("default_time_range"),
+            "metrics": [
+                {
+                    "id": item.get("id"),
+                    "label": item.get("label"),
+                    "definition": item.get("definition"),
+                    "dimensions": item.get("dimensions", []),
+                }
+                for item in catalog.get("metrics", [])
+            ],
+        },
+        "semantic_capabilities": [
+            {
+                "id": item.get("id"),
+                "operations": item.get("operations", []),
+                "entity_types": item.get("entity_types", []),
+            }
+            for item in context.get("capability_registry", {}).get("definitions", [])
+        ],
+    }
+
+
 def _synthesis_outbound_context(
     question: str, evidence: EvidencePacket, context: dict[str, Any]
 ) -> dict[str, Any]:
@@ -1089,6 +1253,7 @@ def provider_from_environment() -> LLMProvider:
         return OpenAICompatibleProvider(
             model=os.environ.get("METRO_ASSISTANT_MODEL", "gpt-5.6-sol"),
             base_url=os.environ.get("OPENAI_BASE_URL"),
+            reasoning_effort=os.environ.get("METRO_ASSISTANT_REASONING_EFFORT"),
         )
     if mode == "hermes-codex":
         return HermesCodexProvider(

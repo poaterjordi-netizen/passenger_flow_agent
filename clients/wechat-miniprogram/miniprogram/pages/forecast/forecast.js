@@ -12,6 +12,7 @@ Page({
   data: {
     audit: null,
     columns: [],
+    dataScope: "synthetic",
     error: "",
     loading: true,
     referenceDate: "",
@@ -32,6 +33,7 @@ Page({
         app.globalData.catalog = catalog
         const referenceDate = catalog.available_dates[0]
         this.setData({
+          dataScope: catalog.data_scope,
           loading: false,
           referenceDate,
           targetDate: nextDate(referenceDate)
@@ -45,6 +47,12 @@ Page({
   onSchemeInput(event) { this.setData({ schemeId: event.detail.value }) },
 
   submitForecast() {
+    if (this.data.dataScope !== "synthetic") {
+      this.setData({
+        error: "当前真实数据库环境尚未准入指定日复制预测。请到“智能”页进行事件预测准备度分析，避免把基线复制误当成真实预测。"
+      })
+      return
+    }
     const schemeId = Number(this.data.schemeId)
     if (!Number.isInteger(schemeId) || schemeId < 0) {
       this.setData({ error: "方案编号必须是非负整数" })

@@ -3,7 +3,7 @@
     <view class="hero-kicker">Metro Operations</view>
     <view class="hero-title">客流态势，一屏掌握</view>
     <view class="hero-subtitle">确定性指标计算 · 受控查询 · 全链路审计</view>
-    <view class="scope-badge">● 合成数据体验环境</view>
+    <view class="scope-badge">● {{scopeLabel}}</view>
   </view>
 
   <view wx:if="{{error}}" class="error-card">
@@ -57,6 +57,13 @@
           <view>
             <view class="quick-title">指定日预测</view>
             <view class="quick-note">复制参考日客流模式</view>
+          </view>
+        </view>
+        <view class="quick-card" bindtap="openAssistant">
+          <view class="quick-mark assistant-mark">AI</view>
+          <view>
+            <view class="quick-title">智能分析</view>
+            <view class="quick-note">GPT 语义编译、真实查询与证据核验</view>
           </view>
         </view>
       </view>

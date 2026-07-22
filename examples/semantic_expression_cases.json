@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {"case_id":"semantic-001","category":"paraphrase","messages":["劳驾把一号线在库里的画像讲明白"],"expected_route":"data","expected_operations":["describe"],"expected_target_kind":"line","expected_entity_types":["line"],"expected_status":"completed"},
+    {"case_id":"semantic-002","category":"typo","messages":["给出数据库中北京地铁一号线到情况"],"expected_route":"data","expected_operations":["describe","query","report"],"expected_target_kind":"line","expected_entity_types":["line"],"expected_status":"completed"},
+    {"case_id":"semantic-003","category":"colloquial","messages":["库里都趴着哪些地铁站，整一份清单"],"expected_route":"data","expected_operations":["discover"],"expected_target_kind":"station","expected_entity_types":[],"expected_status":"completed"},
+    {"case_id":"semantic-004","category":"catalog","messages":["这批数据到底能算哪些指标"],"expected_route":"data","expected_operations":["discover"],"expected_target_kind":"metric","expected_entity_types":[],"expected_status":"completed"},
+    {"case_id":"semantic-005","category":"catalog","messages":["有数的日子都有哪些"],"expected_route":"data","expected_operations":["discover"],"expected_target_kind":"date","expected_entity_types":[],"expected_status":"completed"},
+    {"case_id":"semantic-006","category":"hybrid","messages":["一号线进站客流为何变化，通常又受哪些因素影响？"],"expected_route":"hybrid","expected_operations":["diagnose","explain"],"expected_target_kind":"line","expected_entity_types":["line"],"expected_status":"completed"},
+    {"case_id":"semantic-007","category":"general","messages":["断面客流这个概念怎么理解？"],"expected_route":"general","expected_operations":["explain"],"expected_target_kind":"metric","expected_entity_types":[],"expected_status":"completed"},
+    {"case_id":"semantic-008","category":"external","messages":["明天天气会怎样影响地铁客流？"],"expected_route":"external","expected_operations":["explain"],"expected_target_kind":"metric","expected_entity_types":[],"expected_status":"completed"},
+    {"case_id":"semantic-009","category":"travel","messages":["从北京交通大学去北京工业大学，公共交通怎么走"],"expected_route":"external","expected_operations":["travel"],"expected_target_kind":"place","expected_entity_types":["place","place"],"expected_status":"completed"},
+    {"case_id":"semantic-010","category":"clarify","messages":["从北京交通大学出发怎么走"],"expected_route":["clarify","external"],"expected_operations":["travel"],"expected_target_kind":"place","expected_entity_types":["place"],"expected_status":"needs_clarification"},
+    {"case_id":"semantic-011","category":"ranking","messages":["进站最多的三个站给我瞅瞅"],"expected_route":"data","expected_operations":["rank"],"expected_target_kind":"station","expected_entity_types":[],"expected_status":"completed"},
+    {"case_id":"semantic-012","category":"compare","messages":["把一号线和二号线的进站量摆在一起比一比"],"expected_route":"data","expected_operations":["compare"],"expected_target_kind":"line","expected_entity_types":["line","line"],"expected_status":"completed"},
+    {"case_id":"semantic-013","category":"forecast","messages":["奥体中心四万人演唱会，预测客流并给建议"],"expected_route":"hybrid","expected_operations":["forecast"],"expected_target_kind":"event","expected_entity_types":["place","event"],"expected_status":"completed"},
+    {"case_id":"semantic-014","category":"hard_negative","messages":["比较北京和上海哪个更适合旅游"],"expected_route":"general","expected_operations":["compare","explain"],"expected_target_kind":"place","expected_entity_types":["place","place"],"expected_status":"completed"},
+    {"case_id":"semantic-015","category":"unknown_entity","messages":["说说数据库里的九十九号线"],"expected_route":"data","expected_operations":["describe"],"expected_target_kind":"line","expected_entity_types":["line"],"expected_status":"needs_clarification"},
+    {"case_id":"semantic-016","category":"multiturn","messages":["查一号线各站进站量","那二号线呢"],"expected_route":"data","expected_operations":["query"],"expected_target_kind":"line","expected_entity_types":["line"],"expected_status":"completed"},
+    {"case_id":"semantic-017","category":"multiturn","messages":["查一号线各站进站量","只看排名"],"expected_route":"data","expected_operations":["rank"],"expected_target_kind":"station","expected_entity_types":[],"expected_status":"completed"},
+    {"case_id":"semantic-018","category":"dataset","messages":["用一句话讲清楚当前数据库有什么、覆盖到哪儿"],"expected_route":"data","expected_operations":["describe"],"expected_target_kind":"dataset","expected_entity_types":[],"expected_status":"completed"},
+    {"case_id":"semantic-019","category":"mixed_scope","messages":["查一号线进站量，再解释早高峰拥挤通常是怎么形成的"],"expected_route":"hybrid","expected_operations":["query","explain"],"expected_target_kind":"line","expected_entity_types":["line"],"expected_status":"completed"},
+    {"case_id":"semantic-020","category":"external_current","messages":["现在北京地铁一号线是否有延误"],"expected_route":"external","expected_operations":["explain","diagnose","query"],"expected_target_kind":"line","expected_entity_types":["line"],"expected_status":"completed"}
+  ]
+}

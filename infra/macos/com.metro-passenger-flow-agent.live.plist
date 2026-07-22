@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.metro-passenger-flow-agent.live</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/xiaobosun/software/metro-passenger-flow-agent/scripts/run_live_launchd.sh</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/xiaobosun/software/metro-passenger-flow-agent</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>15</integer>
+  <key>StandardOutPath</key>
+  <string>/Users/xiaobosun/.local/share/metro-passenger-flow-agent/logs/live.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/xiaobosun/.local/share/metro-passenger-flow-agent/logs/live.err.log</string>
+</dict>
+</plist>

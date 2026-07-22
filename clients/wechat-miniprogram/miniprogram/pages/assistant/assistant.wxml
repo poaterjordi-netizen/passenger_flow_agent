@@ -1,0 +1,282 @@
+<view class="page-shell assistant-shell">
+  <view class="hero assistant-hero">
+    <view class="hero-kicker">GPT SemanticFrame</view>
+    <view class="hero-title">智能分析</view>
+    <view class="hero-subtitle">与网站共用同一套语义编译、QueryIR、工具、证据和核验链路。</view>
+    <view class="scope-badge">● {{transportLabel}}</view>
+  </view>
+
+  <view wx:if="{{error}}" class="error-card">
+    <view>{{error}}</view>
+    <view class="error-actions">
+      <view class="text-button" bindtap="reconnect">重新连接</view>
+      <view class="text-button" bindtap="openSettings">检查设置 →</view>
+    </view>
+  </view>
+
+  <view wx:if="{{initializing}}" class="loading-state">正在建立受控智能体会话…</view>
+
+  <view wx:if="{{capabilities}}" class="card runtime-card">
+    <view class="runtime-heading">
+      <view>
+        <view class="runtime-title">{{capabilities.provider}}</view>
+        <view class="runtime-note">{{capabilities.model}} · {{capabilities.dataScope}}</view>
+      </view>
+      <view class="runtime-state {{capabilities.modelActive ? 'runtime-active' : ''}}">
+        {{capabilities.modelActive ? '真实模型' : '确定性/影子'}}
+      </view>
+    </view>
+    <view class="runtime-meta">
+      <text>能力版本 {{capabilities.registryVersion}}</text>
+      <text>{{capabilities.operationCount}} 项 Operation</text>
+    </view>
+  </view>
+
+  <view wx:if="{{capabilities}}" class="card architecture-card">
+    <view class="card-title">大模型运行结构</view>
+    <scroll-view class="architecture-scroll" scroll-x enable-flex>
+      <view class="architecture-row">
+        <view class="architecture-stage" wx:for="{{capabilities.stages}}" wx:key="key">
+          <view class="stage-top"><text class="mono">{{item.index}}</text><text>{{item.owner}}</text></view>
+          <view class="stage-title">{{item.label}}</view>
+          <view class="stage-detail">{{item.detail}}</view>
+        </view>
+      </view>
+    </scroll-view>
+    <view wx:if="{{capabilities.productionGaps.length}}" class="production-gaps">
+      <view class="detail-title">尚未生产化</view>
+      <view wx:for="{{capabilities.productionGaps}}" wx:key="*this">• {{item}}</view>
+    </view>
+  </view>
+
+  <view class="card composer-card">
+    <view class="composer-heading">
+      <view class="section-title">业务问题</view>
+      <view class="session-action" bindtap="newSession">新会话</view>
+    </view>
+    <textarea
+      class="question-input"
+      maxlength="4000"
+      auto-height
+      value="{{message}}"
+      bindinput="onMessageInput"
+      placeholder="直接描述要查询、解释、预测或规划的问题"
+    />
+    <view class="input-count">{{message.length}} / 4000</view>
+    <scroll-view class="example-scroll" scroll-x enable-flex>
+      <view class="example-row">
+        <view
+          class="example-chip"
+          wx:for="{{examples}}"
+          wx:key="*this"
+          data-question="{{item}}"
+          bindtap="chooseQuestion"
+        >{{item}}</view>
+      </view>
+    </scroll-view>
+    <button
+      class="primary-button submit-button"
+      loading="{{sending}}"
+      disabled="{{sending || initializing}}"
+      bindtap="submit"
+    >{{sending ? 'GPT 正在理解、查询并核验…' : '开始智能分析'}}</button>
+    <view class="session-id mono">session：{{sessionId || '尚未建立'}}</view>
+  </view>
+
+  <view wx:if="{{history.length}}" class="section history-section">
+    <view class="section-title">本会话最近问题</view>
+    <view class="history-list">
+      <view class="history-item" wx:for="{{history}}" wx:key="runId">
+        <view class="history-question">{{item.question}}</view>
+        <view class="history-answer">{{item.answer}}</view>
+      </view>
+    </view>
+  </view>
+
+  <block wx:if="{{result}}">
+    <view class="section result-section">
+      <view class="result-heading">
+        <view class="section-title">回答、证据与轨迹</view>
+        <view class="copy-run" bindtap="copyRunId">复制 Run ID</view>
+      </view>
+      <view class="badge-row">
+        <view class="status-pill {{result.completed ? 'pill-ok' : 'pill-warn'}}">{{result.status}}</view>
+        <view class="status-pill">{{result.taskType}}</view>
+        <view class="status-pill">{{result.operation}}</view>
+        <view class="status-pill">route: {{result.semanticRoute}}</view>
+        <view class="status-pill">semantic: {{result.semanticSource}}</view>
+      </view>
+      <view class="run-id mono">{{result.runId}}</view>
+    </view>
+
+    <view wx:if="{{result.semantic}}" class="card semantic-card">
+      <view class="card-title">GPT 语义编译与确定性链接</view>
+      <view class="semantic-grid">
+        <view class="mini-stat"><view>执行路线</view><text>{{result.semantic.route}}</text></view>
+        <view class="mini-stat"><view>业务动作</view><text>{{result.semantic.operations}}</text></view>
+        <view class="mini-stat"><view>目标类型</view><text>{{result.semantic.target}}</text></view>
+        <view class="mini-stat"><view>语义置信度</view><text>{{result.semantic.confidence}}</text></view>
+      </view>
+      <view class="semantic-goal">
+        <view class="detail-label">用户目标</view>
+        <view>{{result.semantic.goal}}</view>
+      </view>
+
+      <view class="detail-group">
+        <view class="detail-title">实体原文 → 数据库实体</view>
+        <view wx:if="{{!result.semantic.entities.length}}" class="muted detail-empty">本次没有需要链接的线路或车站实体。</view>
+        <view class="resolution-row" wx:for="{{result.semantic.entities}}" wx:key="key">
+          <view class="resolution-badge {{item.resolved ? 'resolution-ok' : ''}}">{{item.type}} · {{item.reference}} · {{item.status}}</view>
+          <view class="resolution-text">“{{item.rawText}}” → <text class="mono">{{item.selected}}</text></view>
+        </view>
+      </view>
+
+      <view class="detail-group">
+        <view class="detail-title">指标候选 → 登记指标</view>
+        <view wx:if="{{!result.semantic.metrics.length}}" class="muted detail-empty">本次不需要数据库指标。</view>
+        <view class="resolution-row" wx:for="{{result.semantic.metrics}}" wx:key="key">
+          <view class="resolution-badge {{item.resolved ? 'resolution-ok' : ''}}">{{item.status}}</view>
+          <view class="resolution-text">“{{item.rawText}}” → <text class="mono">{{item.selected}}</text></view>
+        </view>
+      </view>
+
+      <view class="memory-box">
+        <view class="detail-title">语义会话记忆</view>
+        <view class="mono memory-line">entity：{{result.semantic.memoryEntities}}</view>
+        <view class="mono memory-line">metric：{{result.semantic.memoryMetric}}</view>
+        <view class="mono memory-line">time：{{result.semantic.memoryTime}}</view>
+      </view>
+      <view class="shadow-box">
+        <view class="detail-title">旧路由影子对比</view>
+        <view>{{result.semantic.disagreements}}</view>
+      </view>
+    </view>
+
+    <view class="verification-card {{result.verification.verified ? 'verification-ok' : 'verification-warn'}}">
+      <view class="verification-heading">
+        <view class="verification-title">{{result.verification.label}}</view>
+        <view class="evidence-count">{{result.verification.evidenceCount}} 条证据引用</view>
+      </view>
+      <view class="warning-line" wx:for="{{result.verification.warnings}}" wx:key="*this">• {{item}}</view>
+      <view class="error-line" wx:for="{{result.verification.errors}}" wx:key="*this">• {{item}}</view>
+    </view>
+
+    <view class="answer-card {{result.verification.verified ? '' : 'answer-unverified'}}">
+      <view class="answer-label">{{result.verification.verified ? '证据化回答' : '未核验回答（禁止采纳）'}}</view>
+      <view wx:if="{{result.response.policyNotice}}" class="policy-notice">{{result.response.policyNotice}}</view>
+      <view class="answer-text">{{result.response.answer}}</view>
+      <view class="answer-list" wx:if="{{result.response.keyFindings.length}}">
+        <view class="answer-list-title">关键发现</view>
+        <view wx:for="{{result.response.keyFindings}}" wx:key="*this">• {{item}}</view>
+      </view>
+      <view class="answer-list limits" wx:if="{{result.response.limitations.length}}">
+        <view wx:for="{{result.response.limitations}}" wx:key="*this">限制：{{item}}</view>
+      </view>
+      <view class="answer-list" wx:if="{{result.response.assumptions.length}}">
+        <view class="answer-list-title">假设</view>
+        <view wx:for="{{result.response.assumptions}}" wx:key="*this">• {{item}}</view>
+      </view>
+      <view class="answer-list recommendations" wx:if="{{result.response.recommendations.length}}">
+        <view class="answer-list-title">处置建议（待人工确认）</view>
+        <view wx:for="{{result.response.recommendations}}" wx:key="*this">• {{item}}</view>
+      </view>
+      <view wx:if="{{result.response.hiddenRecommendations}}" class="hidden-warning">未核验处置建议已隐藏。</view>
+    </view>
+
+    <view wx:if="{{result.externalLinks.length}}" class="card external-card">
+      <view class="card-title">实时路线与核验来源</view>
+      <view
+        class="external-link"
+        wx:for="{{result.externalLinks}}"
+        wx:key="url"
+        data-url="{{item.url}}"
+        bindtap="copyExternalLink"
+      >{{item.label}} · 点击复制链接</view>
+    </view>
+
+    <view wx:if="{{result.table.rows.length}}" class="card table-card">
+      <view class="card-title">结果数据表 · {{result.table.total}} 行</view>
+      <view wx:if="{{result.table.notice}}" class="table-notice">{{result.table.notice}}</view>
+      <scroll-view class="table-scroll" scroll-x>
+        <view class="assistant-table">
+          <view class="assistant-table-row assistant-table-header">
+            <view class="assistant-table-cell" wx:for="{{result.table.columns}}" wx:key="key">{{item.label}}</view>
+          </view>
+          <view class="assistant-table-row" wx:for="{{result.table.rows}}" wx:key="key" wx:for-item="tableRow">
+            <view class="assistant-table-cell" wx:for="{{tableRow.cells}}" wx:key="key" wx:for-item="cell">{{cell.value}}</view>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+
+    <view class="card model-card">
+      <view class="card-title">模型调用</view>
+      <view class="model-grid">
+        <view><text>Provider</text><view>{{result.runtime.provider}}</view></view>
+        <view><text>模型</text><view>{{result.runtime.model}}</view></view>
+        <view><text>运行模式</text><view>{{result.runtime.mode}}</view></view>
+        <view><text>实际 API</text><view>{{result.runtime.modelCalls}} 次</view></view>
+        <view><text>Token</text><view>{{result.runtime.totalTokens}}</view></view>
+        <view><text>时延</text><view>{{result.runtime.elapsed}}</view></view>
+      </view>
+      <view class="model-egress">模型出域：{{result.runtime.egressCount}} 次，批准 {{result.runtime.approvedEgressCount}} 次 · {{result.runtime.status}}</view>
+    </view>
+
+    <view class="trace-grid">
+      <view class="card trace-card">
+        <view class="card-title">执行计划</view>
+        <view wx:if="{{!result.plan.length}}" class="muted detail-empty">没有执行计划。</view>
+        <view class="trace-item" wx:for="{{result.plan}}" wx:key="key">
+          <view><text class="mono trace-id">{{item.id}}</text> <text class="trace-name">{{item.tool}}</text></view>
+          <view class="trace-meta mono">depends_on: {{item.dependencies}}</view>
+          <view class="trace-meta mono">{{item.arguments}}</view>
+        </view>
+      </view>
+
+      <view class="card trace-card">
+        <view class="card-title">工具结果</view>
+        <view class="trace-item" wx:for="{{result.tools}}" wx:key="key">
+          <view class="tool-line">
+            <text class="mono trace-id">{{item.id}}</text>
+            <text class="trace-name">{{item.tool}}</text>
+            <text class="tool-status {{item.success ? 'tool-success' : ''}}">{{item.status}}</text>
+          </view>
+          <view class="trace-meta">{{item.claim}}</view>
+          <view class="trace-meta mono">returned/matched: {{item.returned}}/{{item.matched}}</view>
+          <view class="trace-meta mono">query: {{item.queryHash}} · result: {{item.resultHash}}</view>
+          <view wx:if="{{item.blockReason}}" class="warning-line">blocked: {{item.blockReason}}</view>
+        </view>
+      </view>
+
+      <view class="card trace-card">
+        <view class="card-title">状态机时间线</view>
+        <view class="event-row" wx:for="{{result.events}}" wx:key="key">
+          <view class="mono event-state">{{item.state}}</view>
+          <view class="event-detail">{{item.detail}}</view>
+        </view>
+      </view>
+
+      <view class="card trace-card">
+        <view class="card-title">Evidence Packet</view>
+        <view wx:if="{{!result.evidence.length}}" class="muted detail-empty">本次没有数据库证据项。</view>
+        <view class="evidence-item" wx:for="{{result.evidence}}" wx:key="key">
+          <view class="evidence-head"><text class="mono">{{item.id}}</text><text>{{item.kind}}</text><text>{{item.complete ? '完整' : '不完整'}}</text></view>
+          <view class="evidence-claim">{{item.claim}}</view>
+          <view class="trace-meta mono">returned/matched: {{item.returned}}/{{item.matched}}</view>
+          <view class="trace-meta mono">{{item.coverage}} · query {{item.queryHash}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:if="{{result.response.followUps.length}}" class="section followup-section">
+      <view class="section-title">可继续追问</view>
+      <view
+        class="followup-chip"
+        wx:for="{{result.response.followUps}}"
+        wx:key="*this"
+        data-question="{{item}}"
+        bindtap="chooseQuestion"
+      >{{item}}</view>
+    </view>
+  </block>
+</view>

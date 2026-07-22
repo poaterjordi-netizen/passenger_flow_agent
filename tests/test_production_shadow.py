@@ -406,6 +406,35 @@ class ProductionShadowTests(unittest.TestCase):
             [{"line": "L-1", "line_name": "Line 1"}],
         )
 
+    def test_line_situation_typo_queries_real_shadow_rows_instead_of_general_gpt(self) -> None:
+        assistant = AssistantService(
+            self.service(),
+            self.root / "line-situation-assistant",
+            provider=FakeProvider(),
+            default_access_context=self.access(),
+            production_enabled=True,
+        )
+        session = assistant.create_session()["session_id"]
+        run = assistant.message(
+            session,
+            AssistantMessageRequest(message="给出数据库中北京地铁一号线到情况"),
+        )
+
+        self.assertEqual(run["status"], "completed")
+        self.assertEqual(run["intent"]["task_type"], "query")
+        self.assertEqual(run["operation_ir"]["operation"], "describe_entity")
+        self.assertEqual(run["operation_ir"]["target_query"], "L-1")
+        self.assertEqual(run["entity_resolutions"][0]["selected_name"], "Line 1")
+        self.assertEqual(run["plan"]["steps"][0]["tool"], "describe_observed_entity")
+        self.assertEqual(run["model_runtime"]["model_calls"], 0)
+        self.assertEqual(
+            run["tool_results"][0]["rows"],
+            [{"line": "L-1", "line_name": "Line 1", "entries": 22}],
+        )
+        self.assertIn("进站量（entries）汇总为 22", run["response"]["answer"])
+        self.assertNotIn("未读取 metroflow", run["response"]["answer"])
+        self.assertTrue(run["verification"]["valid"])
+
     def test_event_forecast_request_returns_real_context_and_admission_requirements(self) -> None:
         assistant = AssistantService(
             self.service(),
@@ -508,10 +537,13 @@ class ProductionShadowTests(unittest.TestCase):
         self.assertEqual(run["status"], "completed")
         self.assertEqual(provider.calls, 0)
         self.assertEqual(len(run["model_egress"]), 1)
-        self.assertEqual(run["model_egress"][0]["purpose"], "synthesis")
-        self.assertEqual(run["model_egress"][0]["decision"], "denied")
-        self.assertEqual(run["model_egress"][0]["status"], "not_called")
-        self.assertTrue(run["model_egress"][0]["exact_payload_hash"])
+        self.assertEqual(
+            [item["purpose"] for item in run["model_egress"]],
+            ["semantic_compile"],
+        )
+        self.assertTrue(all(item["decision"] == "denied" for item in run["model_egress"]))
+        self.assertTrue(all(item["status"] == "not_called" for item in run["model_egress"]))
+        self.assertTrue(all(item["exact_payload_hash"] for item in run["model_egress"]))
 
     def test_production_registry_physically_excludes_unadmitted_tools(self) -> None:
         registry = ToolRegistry(self.service(), self.root / "reports")
@@ -560,6 +592,8 @@ class McpFacadeTests(unittest.TestCase):
             facade = MetroMcpFacade(registry)
             names = {item["name"] for item in facade.list_tools()}
             self.assertIn("query_metric", names)
+            self.assertIn("execute_query_ir", names)
+            self.assertIn("search_entities", names)
             self.assertIn("list_metrics", names)
             self.assertIn("list_available_dates", names)
             self.assertIn("list_observed_entities", names)
@@ -589,6 +623,26 @@ class McpFacadeTests(unittest.TestCase):
                 catalog_result["coverage"]["coverage_type"], "registered_catalog"
             )
             self.assertTrue(catalog_result["coverage"]["complete"])
+            entity_result = facade.call_tool(
+                "search_entities",
+                {
+                    "raw_text": "一号线",
+                    "entity_type": "line",
+                    "query": QueryRequest.model_validate(
+                        {
+                            "metric": "entries",
+                            "time_range": {
+                                "start": "2026-07-20T08:00:00+08:00",
+                                "end": "2026-07-20T09:00:00+08:00",
+                            },
+                            "dimensions": ["line"],
+                            "filters": [],
+                            "limit": 10,
+                        }
+                    ).model_dump(mode="json"),
+                },
+            )
+            self.assertEqual(entity_result["rows"][0]["id"], "L-A")
             with self.assertRaisesRegex(ValueError, "not admitted"):
                 facade.call_tool("execute_sql", {"sql": "SELECT 1"})
             with self.assertRaisesRegex(ValueError, "not admitted"):
