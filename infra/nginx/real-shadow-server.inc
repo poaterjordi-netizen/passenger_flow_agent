@@ -1,13 +1,13 @@
 # Include this file only inside metro.9m-zx.com's TLS server block.
 location = /real-shadow {
-    auth_basic "Metro real-shadow";
-    auth_basic_user_file /etc/nginx/metro-real-shadow.htpasswd;
+    # The parent TLS server protects the synthetic site with Basic Auth. The
+    # external-test path intentionally does not inherit that browser prompt.
+    auth_basic off;
     return 308 /real-shadow/;
 }
 
 location = /real-shadow/health {
-    auth_basic "Metro real-shadow";
-    auth_basic_user_file /etc/nginx/metro-real-shadow.htpasswd;
+    auth_basic off;
     limit_except GET { deny all; }
     limit_req zone=metro_real_shadow_api burst=5 nodelay;
     limit_conn metro_real_shadow_conn 4;
@@ -23,8 +23,7 @@ location = /real-shadow/health {
 }
 
 location ~ ^/real-shadow/api/v1/assistant/sessions/[A-Za-z0-9_-]+/messages$ {
-    auth_basic "Metro real-shadow";
-    auth_basic_user_file /etc/nginx/metro-real-shadow.htpasswd;
+    auth_basic off;
     limit_except POST { deny all; }
     limit_req zone=metro_real_shadow_assistant burst=2 nodelay;
     limit_conn metro_real_shadow_assistant_conn 1;
@@ -50,8 +49,7 @@ location ~ ^/real-shadow/api/v1/assistant/sessions/[A-Za-z0-9_-]+/messages$ {
 }
 
 location /real-shadow/api/ {
-    auth_basic "Metro real-shadow";
-    auth_basic_user_file /etc/nginx/metro-real-shadow.htpasswd;
+    auth_basic off;
     limit_except GET POST { deny all; }
     limit_req zone=metro_real_shadow_api burst=20 nodelay;
     limit_conn metro_real_shadow_conn 8;
@@ -76,8 +74,7 @@ location /real-shadow/api/ {
 }
 
 location /real-shadow/ {
-    auth_basic "Metro real-shadow";
-    auth_basic_user_file /etc/nginx/metro-real-shadow.htpasswd;
+    auth_basic off;
     limit_except GET { deny all; }
     # Preserve the base path expected by the production Vite preview. Stripping
     # it here makes Vite redirect back to /real-shadow/ forever.

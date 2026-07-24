@@ -8,8 +8,13 @@ BRIDGE_LABEL="com.metro-passenger-flow-agent.assistant-bridge"
 LIVE_PLIST="$HOME/Library/LaunchAgents/$LIVE_LABEL.plist"
 BRIDGE_PLIST="$HOME/Library/LaunchAgents/$BRIDGE_LABEL.plist"
 BRIDGE_MANAGER="$PROJECT_ROOT/scripts/manage_assistant_bridge.sh"
+DB_TUNNEL_MANAGER="${METRO_LIVE_TUNNEL_MANAGER:-$HOME/.config/metro-passenger-flow-agent/manage-db-tunnel.sh}"
 LOCAL_URL="http://127.0.0.1:5173/real-shadow/"
 PUBLIC_URL="https://metro.9m-zx.com/real-shadow/"
+
+public_ready() {
+  [[ "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 "$PUBLIC_URL" || true)" == "200" ]]
+}
 
 is_loaded() {
   launchctl print "$USER_DOMAIN/$1" >/dev/null 2>&1
@@ -34,7 +39,9 @@ start() {
   load_agent "$BRIDGE_LABEL" "$BRIDGE_PLIST"
   for _ in {1..120}; do
     if curl -fsS --max-time 2 "$LOCAL_URL" >/dev/null 2>&1 &&
-      "$BRIDGE_MANAGER" status >/dev/null 2>&1; then
+      "$BRIDGE_MANAGER" status >/dev/null 2>&1 &&
+      "$DB_TUNNEL_MANAGER" status >/dev/null 2>&1 &&
+      public_ready; then
       echo "Real-shadow is ready: $PUBLIC_URL"
       return 0
     fi
@@ -66,12 +73,17 @@ status() {
     echo "Encrypted reverse bridge: unavailable" >&2
     failed=1
   fi
-  local public_headers
-  public_headers="$(curl -sS -I --max-time 8 "$PUBLIC_URL" || true)"
-  if grep -Fqi 'www-authenticate: Basic realm="Metro real-shadow"' <<<"$public_headers"; then
-    echo "Independent public password gate: ready"
+  if [[ -x "$DB_TUNNEL_MANAGER" ]] &&
+    "$DB_TUNNEL_MANAGER" status >/dev/null 2>&1; then
+    echo "Private database tunnel: ready"
   else
-    echo "Independent public password gate: unavailable" >&2
+    echo "Private database tunnel: unavailable" >&2
+    failed=1
+  fi
+  if public_ready; then
+    echo "Public external-test ingress: ready"
+  else
+    echo "Public external-test ingress: unavailable" >&2
     failed=1
   fi
   return "$failed"

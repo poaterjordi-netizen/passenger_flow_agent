@@ -120,7 +120,7 @@ real GPT-5.6 Sol calls, prepare the external Keychain/TLS configuration describe
 METRO_LOCAL_LIVE_SHADOW_ACKNOWLEDGED=true ./scripts/run_live_local.sh
 ```
 
-The local site opens at `http://127.0.0.1:5173/real-shadow/`. The password-gated,
+The local site opens at `http://127.0.0.1:5173/real-shadow/`. The public external-test,
 operator-supervised Aliyun ingress is documented in
 [`docs/real_shadow_demo.md`](docs/real_shadow_demo.md). Both surfaces identify the runtime as a
 real-data shadow, not as a production operational system.

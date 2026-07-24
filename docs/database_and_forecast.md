@@ -192,7 +192,7 @@ production promotion are still unverified. Therefore the website must not presen
 current operational view or enable write, notification, export, arbitrary SQL, or automatic
 control actions.
 
-The temporary password-gated Aliyun ingress, one-click operator controls, outage behavior, and
+The temporary public external-test Aliyun ingress, one-click operator controls, outage behavior, and
 acceptance checks are documented in [`real_shadow_demo.md`](real_shadow_demo.md). It is an
 explicitly approved tender-demo exception, not a production promotion.
 

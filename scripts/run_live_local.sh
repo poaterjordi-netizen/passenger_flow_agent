@@ -9,6 +9,7 @@ MYSQL_CA="$RUNTIME_CONFIG_DIR/mysql-ca.pem"
 MYSQL_PIN_FILE="$RUNTIME_CONFIG_DIR/mysql-leaf.sha256"
 SOURCE_REGISTRY="$RUNTIME_CONFIG_DIR/live-source-registry.json"
 PREFLIGHT_REPORT="$RUNTIME_DATA_DIR/live-preflight-report.json"
+LIVE_WEB_DIST="${METRO_LIVE_WEB_DIST_DIR:-$RUNTIME_DATA_DIR/web-dist}"
 HERMES_COMMAND="${METRO_ASSISTANT_HERMES_COMMAND:-$HOME/.local/bin/hermes}"
 TUNNEL_MANAGER="${METRO_LIVE_TUNNEL_MANAGER:-$RUNTIME_CONFIG_DIR/manage-db-tunnel.sh}"
 
@@ -124,9 +125,27 @@ if [[ "${METRO_LIVE_EVALUATE_ONLY:-false}" == "true" ]]; then
   exit 0
 fi
 
+DB_TUNNEL_WATCHDOG_PID=""
+
+maintain_database_tunnel() {
+  while true; do
+    if ! "$TUNNEL_MANAGER" status >/dev/null 2>&1; then
+      echo "Database tunnel is unavailable; attempting a bounded restart." >&2
+      if ! "$TUNNEL_MANAGER" start; then
+        echo "Database tunnel restart failed; retrying in 15 seconds." >&2
+      fi
+    fi
+    sleep 15
+  done
+}
+
 cleanup() {
+  [[ -n "$DB_TUNNEL_WATCHDOG_PID" ]] &&
+    kill "$DB_TUNNEL_WATCHDOG_PID" 2>/dev/null || true
   [[ -n "${WEB_PID:-}" ]] && kill "$WEB_PID" 2>/dev/null || true
   [[ -n "${API_PID:-}" ]] && kill "$API_PID" 2>/dev/null || true
+  [[ -n "$DB_TUNNEL_WATCHDOG_PID" ]] &&
+    wait "$DB_TUNNEL_WATCHDOG_PID" 2>/dev/null || true
   wait "${WEB_PID:-}" "${API_PID:-}" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
@@ -142,8 +161,19 @@ if ! kill -0 "$API_PID" 2>/dev/null; then
   exit 1
 fi
 
-npm --prefix clients/web run build
-npm --prefix clients/web run preview -- --host 127.0.0.1 --port 5173 --strictPort &
+# Keep the live preview outside clients/web/dist. A routine developer build
+# uses "/" as its base and must not be able to overwrite the running
+# /real-shadow/ assets.
+npm --prefix clients/web run build -- --outDir "$LIVE_WEB_DIST" --emptyOutDir
+npm --prefix clients/web run preview -- \
+  --outDir "$LIVE_WEB_DIST" \
+  --host 127.0.0.1 \
+  --port 5173 \
+  --strictPort &
 WEB_PID=$!
+if [[ "$METRO_DB_HOST" == "127.0.0.1" && "$METRO_DB_PORT" == "13306" ]]; then
+  maintain_database_tunnel &
+  DB_TUNNEL_WATCHDOG_PID=$!
+fi
 echo "Live local shadow is running: http://127.0.0.1:5173/real-shadow/"
 wait "$API_PID" "$WEB_PID"
